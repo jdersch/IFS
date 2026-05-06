@@ -47,10 +47,10 @@ namespace IFS.EFTP
             }
         }
 
-        public static void SendFile(PUPPort destination, Stream data)
+        public static void SendFile(PUPPort destination, Stream data, HostAddress localHostAddress)
         {
             UInt32 socketID = SocketIDGenerator.GetNextSocketID();
-            EFTPChannel newChannel = new EFTPChannel(destination, socketID);
+            EFTPChannel newChannel = new EFTPChannel(destination, socketID, localHostAddress);
             _activeChannels.Add(socketID, newChannel);
 
             EFTPSend.StartSend(newChannel, data);

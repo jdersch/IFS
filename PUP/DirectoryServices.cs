@@ -17,10 +17,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.IO;
-using System.Text;
-using System.Threading.Tasks;
 using IFS.Logging;
 
 namespace IFS
@@ -56,13 +53,15 @@ namespace IFS
     {
         private DirectoryServices()
         {
-            // Get our host address from the configuration database.       
-            _localHost = new HostAddress((byte)Configuration.ServerNetwork, (byte)Configuration.ServerHost);            
+            // Get our host address from the configuration database.
+            // Directory services are served from the first address specified in ServerHosts.
+            ServerConfiguration config = Configuration.ServerConfigurations[0];
+            _localHost = config.HostAddress;
 
             // Load in hosts table from hosts file.
             LoadHostTable();
 
-            // Look up our hostname in the table.            
+            // Look up our hostname in the table.
             _localHostName = AddressLookup(_localHost);
 
             if (_localHostName == null)
@@ -118,16 +117,18 @@ namespace IFS
             get { return _instance; }
         }
 
+        /*
         public HostAddress LocalHostAddress
         {
             get { return _localHost; }
-        }
+        } */
 
         public byte LocalNetwork
         {
             get { return _localHost.Network; }
         }
 
+        /*
         public byte LocalHost
         {
             get { return _localHost.Host; }
@@ -136,7 +137,7 @@ namespace IFS
         public string LocalHostName
         {
             get { return _localHostName; }
-        }
+        } */
 
         private void LoadHostTable()
         {

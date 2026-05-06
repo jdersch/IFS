@@ -63,12 +63,12 @@ namespace IFS.Mail
         /// </summary>
         /// <param name="mailbox"></param>
         /// <returns></returns>
-        public static IEnumerable<string> EnumerateMail(string mailbox)
+        public static IEnumerable<string> EnumerateMail(string mailroot, string mailbox)
         {
-            if (Directory.Exists(GetMailboxPath(mailbox)))
+            if (Directory.Exists(GetMailboxPath(mailroot, mailbox)))
             {
                 // Get the mail files in this directory
-                return Directory.EnumerateFiles(GetMailboxPath(mailbox), "*.mail", SearchOption.TopDirectoryOnly);
+                return Directory.EnumerateFiles(GetMailboxPath(mailroot, mailbox), "*.mail", SearchOption.TopDirectoryOnly);
             }
             else
             {
@@ -83,14 +83,14 @@ namespace IFS.Mail
         /// <param name="mailbox"></param>
         /// <param name="mailFile"></param>
         /// <returns></returns>
-        public static Stream RetrieveMail(string mailbox, string mailFile)
+        public static Stream RetrieveMail(string mailroot, string mailbox, string mailFile)
         {
-            if (File.Exists(GetMailboxPathForFile(mailbox, mailFile)))
+            if (File.Exists(GetMailboxPathForFile(mailroot, mailbox, mailFile)))
             {
                 //
                 // Open the requested mail file.
                 //
-                return new FileStream(GetMailboxPathForFile(mailbox, mailFile), FileMode.Open, FileAccess.Read);
+                return new FileStream(GetMailboxPathForFile(mailroot, mailbox, mailFile), FileMode.Open, FileAccess.Read);
             }
             else
             {
@@ -100,9 +100,9 @@ namespace IFS.Mail
             }
         }
 
-        public static string GetReceivedTime(string mailbox, string mailFile)
+        public static string GetReceivedTime(string mailroot, string mailbox, string mailFile)
         {            
-            if (File.Exists(GetMailboxPathForFile(mailbox, mailFile)))
+            if (File.Exists(GetMailboxPathForFile(mailroot, mailbox, mailFile)))
             {
                 //
                 // Get the timestamp for the mail file
@@ -126,14 +126,14 @@ namespace IFS.Mail
         /// </summary>
         /// <param name="mailbox"></param>
         /// <param name="mailFile"></param>
-        public static void DeleteMail(string mailbox, string mailFile)
+        public static void DeleteMail(string mailroot, string mailbox, string mailFile)
         {
-            if (File.Exists(GetMailboxPathForFile(mailbox, mailFile)))
+            if (File.Exists(GetMailboxPathForFile(mailroot, mailbox, mailFile)))
             {
                 //
                 // Delete the requested mail file.
                 //
-                File.Delete(GetMailboxPathForFile(mailbox, mailFile));
+                File.Delete(GetMailboxPathForFile(mailroot, mailbox, mailFile));
             }
             else
             {
@@ -142,32 +142,32 @@ namespace IFS.Mail
             }
         }
 
-        public static Stream StoreMail(string mailbox)
+        public static Stream StoreMail(string mailroot, string mailbox)
         {
             string newMailFile = Path.GetRandomFileName() + ".mail";
 
             //
             // Create the user's mail directory if it doesn't already exist.
             //
-            if (!Directory.Exists(GetMailboxPath(mailbox)))
+            if (!Directory.Exists(GetMailboxPath(mailroot, mailbox)))
             {
-                Directory.CreateDirectory(GetMailboxPath(mailbox));
+                Directory.CreateDirectory(GetMailboxPath(mailroot,mailbox));
             }
 
             //
             // Create the new mail file.
             //
-            return new FileStream(GetMailboxPathForFile(mailbox, newMailFile), FileMode.CreateNew, FileAccess.ReadWrite);
+            return new FileStream(GetMailboxPathForFile(mailroot,mailbox, newMailFile), FileMode.CreateNew, FileAccess.ReadWrite);
         }
 
-        private static string GetMailboxPath(string mailbox)
+        private static string GetMailboxPath(string mailroot, string mailbox)
         {
-            return Path.Combine(Configuration.MailRoot, mailbox);
+            return Path.Combine(mailroot, mailbox);
         }
 
-        private static string GetMailboxPathForFile(string mailbox, string mailFile)
+        private static string GetMailboxPathForFile(string mailroot, string mailbox, string mailFile)
         {
-            return Path.Combine(Configuration.MailRoot, mailbox, mailFile);
+            return Path.Combine(mailroot, mailbox, mailFile);
         }
     }
 }

@@ -32,14 +32,14 @@ namespace IFS.EFTP
     /// </summary>
     public class EFTPChannel
     {
-        public EFTPChannel(PUPPort destination, UInt32 socketID)
+        public EFTPChannel(PUPPort destination, UInt32 socketID, HostAddress localHostAddress)
         {
             _clientConnectionPort = destination;
 
             _outputAckEvent = new AutoResetEvent(false);
 
             // We create our connection port using a unique socket address.
-            _serverConnectionPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, socketID);
+            _serverConnectionPort = new PUPPort(localHostAddress, socketID);
 
             _outputQueue = new Queue<byte>(65536);
             _sendPos = 0;

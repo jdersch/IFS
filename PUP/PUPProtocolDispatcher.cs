@@ -26,7 +26,8 @@ using IFS.FTP;
 using IFS.Gateway;
 
 namespace IFS
-{   
+{
+    
     /// <summary>
     /// Dispatches incoming PUPs to the right protocol handler; sends outgoing PUPs over the network.
     /// </summary>
@@ -35,19 +36,22 @@ namespace IFS
         /// <summary>
         /// Private Constructor for this class, enforcing Singleton usage.
         /// </summary>
-        public PUPProtocolDispatcher()
+        public PUPProtocolDispatcher(ServerConfiguration config)
         {
+            _configuration = config;
             _dispatchMap = new Dictionary<uint, PUPProtocolEntry>();
 
             RegisterProtocols();
-        }   
+        }
+
+        public ServerConfiguration Configuration => _configuration;
         
         public void Shutdown()
         {
             _breathOfLifeServer.Shutdown();
             BSPManager.Shutdown();
             //EFTPManager.Shutdown();
-        }                    
+        }
 
         public void ReceivePUP(PUP pup)
         {
@@ -57,8 +61,8 @@ namespace IFS
             // something else has set the interface to promiscuous mode, that
             // setting may be overridden.
             //
-            if (pup.DestinationPort.Host != 0 &&                                           // Not broadcast.
-                pup.DestinationPort.Host != DirectoryServices.Instance.LocalHost)          // Not our address.
+            if (pup.DestinationPort.Host != 0 &&                              // Not broadcast.
+                pup.DestinationPort.Host != _configuration.HostAddress.Host)  // Not our address.
             {
                 // Do nothing with this PUP.
                 Log.Write(LogType.Verbose, LogComponent.PUP, "PUP is neither broadcast nor for us.  Discarding.");
@@ -82,7 +86,7 @@ namespace IFS
                 {
                     // RTP / BSP protocol.  Pass this to the BSP handler to set up a channel.
                     Log.Write(LogType.Verbose, LogComponent.PUP, "Dispatching PUP (source {0}, dest {1}) to BSP protocol for {0}.", pup.SourcePort, pup.DestinationPort, entry.FriendlyName);                    
-                    BSPManager.EstablishRendezvous(pup, entry.WorkerType);
+                    BSPManager.EstablishRendezvous(_configuration, pup, entry.WorkerType);
                 }
             }
             else if (BSPManager.ChannelExistsForSocket(pup))
@@ -121,19 +125,30 @@ namespace IFS
         {
             // Set up protocols:
 
+            if (_configuration.IsGatewayServer)
+            {
+                // Stuff that only runs on the gateway server:
+
+                // Connectionless
+                RegisterProtocol(new PUPProtocolEntry("Gateway Information", 0x2, ConnectionType.Connectionless, new GatewayInformationProtocol(_configuration)));
+                RegisterProtocol(new PUPProtocolEntry("Misc Services", 0x4, ConnectionType.Connectionless, new MiscServicesProtocol(_configuration)));
+
+                // RTP/BSP based:
+                RegisterProtocol(new PUPProtocolEntry("CopyDisk", 0x15  /* 25B */, ConnectionType.BSP, typeof(CopyDiskWorker)));
+                RegisterProtocol(new PUPProtocolEntry("Mail", 0x7, ConnectionType.BSP, typeof(FTPWorker)));
+
+                // Breath Of Life
+                _breathOfLifeServer = new BreathOfLife(_configuration);
+            }
+
             // Connectionless
-            RegisterProtocol(new PUPProtocolEntry("Gateway Information", 2, ConnectionType.Connectionless, new GatewayInformationProtocol()));
-            RegisterProtocol(new PUPProtocolEntry("Misc Services", 0x4, ConnectionType.Connectionless, new MiscServicesProtocol()));
-            RegisterProtocol(new PUPProtocolEntry("Echo", 0x5, ConnectionType.Connectionless, new EchoProtocol()));            
+            RegisterProtocol(new PUPProtocolEntry("Echo", 0x5, ConnectionType.Connectionless, new EchoProtocol(_configuration)));
 
-            // RTP/BSP based:            
-            RegisterProtocol(new PUPProtocolEntry("CopyDisk", 0x15  /* 25B */, ConnectionType.BSP, typeof(CopyDiskWorker)));
+            // RTP/BSP based:
             RegisterProtocol(new PUPProtocolEntry("FTP", 0x3, ConnectionType.BSP, typeof(FTPWorker)));
-            RegisterProtocol(new PUPProtocolEntry("Mail", 0x7, ConnectionType.BSP, typeof(FTPWorker)));            
-
-            // Breath Of Life
-            _breathOfLifeServer = new BreathOfLife();
         }
+
+        private ServerConfiguration _configuration;
 
         /// <summary>
         /// Map from socket to protocol implementation

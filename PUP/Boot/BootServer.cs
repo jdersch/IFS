@@ -19,9 +19,6 @@ using IFS.Logging;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace IFS.Boot
 {
@@ -39,6 +36,9 @@ namespace IFS.Boot
     {
         static BootServer()
         {
+            // Grab the bootfile root directory, this is taken from the
+            // first server config
+            _bootRoot = Configuration.ServerConfigurations[0].BootRoot;
             LoadBootFileTables();
         }
 
@@ -90,7 +90,7 @@ namespace IFS.Boot
                         //
                         // Validate that the file exists in the boot subdirectory.
                         //
-                        if (!File.Exists(Path.Combine(Configuration.BootRoot, tokens[1])))
+                        if (!File.Exists(Path.Combine(_bootRoot, tokens[1])))
                         {
                             Log.Write(LogType.Warning, LogComponent.BootServer,
                                 "bootdirectory.txt line {0}: Specified boot file '{1}' does not exist.", lineNumber, tokens[1]);
@@ -131,7 +131,7 @@ namespace IFS.Boot
         {
             if (_numberToNameTable.ContainsKey(number))
             {
-                string filePath = Path.Combine(Configuration.BootRoot, _numberToNameTable[number]);
+                string filePath = Path.Combine(_bootRoot, _numberToNameTable[number]);
                 try
                 {
                     return new FileStream(filePath, FileMode.Open, FileAccess.Read);
@@ -164,6 +164,7 @@ namespace IFS.Boot
             return bootFiles;
         }
 
-        private static Dictionary<ushort, string> _numberToNameTable;        
+        private static string _bootRoot;
+        private static Dictionary<ushort, string> _numberToNameTable;
     }
 }

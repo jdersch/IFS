@@ -29,9 +29,9 @@ namespace IFS
     /// </summary>
     public class EchoProtocol : PUPProtocolBase
     {
-        public EchoProtocol()
+        public EchoProtocol(ServerConfiguration configuration)
         {
-
+            _configuration = configuration;
         }
 
         /// <summary>
@@ -44,7 +44,7 @@ namespace IFS
             if (p.Type == PupType.EchoMe)
             {
                 // Just send it back with the source/destination swapped.
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.SourcePort.Socket);
 
                 //
                 // An annoyance:  The Alto "puptest" diagnostic actually expects us to echo *everything* back including
@@ -71,6 +71,8 @@ namespace IFS
                 Router.Instance.SendPup(echoPup);
             }
         }
+
+        private ServerConfiguration _configuration;
 
     }
 }

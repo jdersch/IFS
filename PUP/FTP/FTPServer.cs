@@ -113,8 +113,10 @@ namespace IFS.FTP
 
     public class FTPWorker : BSPWorkerBase
     {
-        public FTPWorker(BSPChannel channel) : base(channel)
+        public FTPWorker(ServerConfiguration config, BSPChannel channel) : base(config, channel)
         {
+            _ftpRoot = config.FTPRoot;
+
             // Register for channel events
             channel.OnDestroy += OnChannelDestroyed;
 
@@ -125,7 +127,7 @@ namespace IFS.FTP
         }
 
         public override void Terminate()
-        {            
+        {
             ShutdownWorker();
         }
 
@@ -269,7 +271,7 @@ namespace IFS.FTP
                             {
                                 foreach (string mailFileToDelete in _lastRetrievedMailFiles)
                                 {
-                                    MailManager.DeleteMail(_lastRetrievedMailbox, mailFileToDelete);
+                                    MailManager.DeleteMail(_config.MailRoot, _lastRetrievedMailbox, mailFileToDelete);
                                 }
                             }
 
@@ -558,7 +560,7 @@ namespace IFS.FTP
             // Check the privileges of the user.  If the user has write permissions
             // then we are OK to store.  Otherwise, we must be writing to the user's directory.
             //
-            string fullFileName = Path.Combine(Configuration.FTPRoot, fullPath);
+            string fullFileName = Path.Combine(_ftpRoot, fullPath);
             if (userToken.Privileges != IFSPrivileges.ReadWrite &&
                 !IsUserDirectory(userToken, fullFileName))
             {
@@ -652,7 +654,7 @@ namespace IFS.FTP
             {
                 try
                 {
-                    File.Delete(Path.Combine(Configuration.FTPRoot, fullPath));
+                    File.Delete(Path.Combine(_ftpRoot, fullPath));
                 }
                 catch
                 {
@@ -687,7 +689,7 @@ namespace IFS.FTP
             // Check the privileges of the user.  If the user has write permissions
             // then we are OK to delete.  Otherwise, we must be deleting files in the user's directory.
             //
-            string fullFileName = Path.Combine(Configuration.FTPRoot, fullPath);
+            string fullFileName = Path.Combine(_ftpRoot, fullPath);
             if (userToken.Privileges != IFSPrivileges.ReadWrite &&
                 !IsUserDirectory(userToken, fullFileName))
             {
@@ -728,7 +730,7 @@ namespace IFS.FTP
                 {
                     File.Delete(
                         Path.Combine(
-                            Configuration.FTPRoot, matchingFile.GetPropertyValue(KnownPropertyNames.Directory), matchingFile.GetPropertyValue(KnownPropertyNames.ServerFilename)));
+                            _ftpRoot, matchingFile.GetPropertyValue(KnownPropertyNames.Directory), matchingFile.GetPropertyValue(KnownPropertyNames.ServerFilename)));
 
                     // End the file successfully.  Note that we do NOT send an EOC here, only after all files have been deleted.
                     Log.Write(LogType.Verbose, LogComponent.FTP, "Deleted.");
@@ -762,12 +764,13 @@ namespace IFS.FTP
                 return;
             }
 
-            _lastRetrievedMailbox = mailSpec.GetPropertyValue(KnownPropertyNames.Mailbox);           
+            _lastRetrievedMailbox = mailSpec.GetPropertyValue(KnownPropertyNames.Mailbox);
 
             //
             // Validate that the requested mailbox's registry is on this server.
             //
-            if (!Authentication.ValidateUserRegistry(_lastRetrievedMailbox))
+            string hostName = DirectoryServices.Instance.AddressLookup(_config.HostAddress);
+            if (!Authentication.ValidateUserRegistry(_lastRetrievedMailbox, hostName))
             {
                 SendFTPNoResponse(NoCode.NoValidMailbox, "Incorrect registry for this server.");
                 return;
@@ -797,13 +800,13 @@ namespace IFS.FTP
             //
             // All clear at this point.  If the user has any mail in his/her mailbox, send it now.
             //
-            _lastRetrievedMailFiles = MailManager.EnumerateMail(_lastRetrievedMailbox);
+            _lastRetrievedMailFiles = MailManager.EnumerateMail(_config.MailRoot, _lastRetrievedMailbox);
 
             if (_lastRetrievedMailFiles != null)
             {
                 foreach (string mailFile in _lastRetrievedMailFiles)
                 {                    
-                    using (Stream mailStream = MailManager.RetrieveMail(_lastRetrievedMailbox, mailFile))
+                    using (Stream mailStream = MailManager.RetrieveMail(_config.MailRoot, _lastRetrievedMailbox, mailFile))
                     {
                         Log.Write(LogType.Verbose, LogComponent.FTP, "Preparing to send mail file {0}.", mailFile);
 
@@ -812,7 +815,7 @@ namespace IFS.FTP
                         //
                         PropertyList mailProps = new PropertyList();
                         mailProps.SetPropertyValue(KnownPropertyNames.Length, mailStream.Length.ToString());
-                        mailProps.SetPropertyValue(KnownPropertyNames.DateReceived, MailManager.GetReceivedTime(_lastRetrievedMailbox, mailFile));
+                        mailProps.SetPropertyValue(KnownPropertyNames.DateReceived, MailManager.GetReceivedTime(_config.MailRoot, _lastRetrievedMailbox, mailFile));
                         mailProps.SetPropertyValue(KnownPropertyNames.Opened, "No");
                         mailProps.SetPropertyValue(KnownPropertyNames.Deleted, "No");
                         mailProps.SetPropertyValue(KnownPropertyNames.Type, "Text");                  // We treat all mail as text
@@ -891,7 +894,8 @@ namespace IFS.FTP
                 // We do not support forwarding or routing of mail, so mail intended for another server
                 // will never get there.
                 //
-                if (!Authentication.ValidateUserRegistry(destinationMailbox))
+                string hostName = DirectoryServices.Instance.AddressLookup(_config.HostAddress);
+                if (!Authentication.ValidateUserRegistry(destinationMailbox, hostName))
                 {
                     SendFTPNoResponse(NoCode.NoValidMailbox, "Incorrect registry for this server.  Mail forwarding not supported.");
                     return;
@@ -942,7 +946,7 @@ namespace IFS.FTP
                 // Write out to files
                 foreach (string destination in destinationMailboxes)
                 {
-                    using (Stream mailFile = MailManager.StoreMail(destination))
+                    using (Stream mailFile = MailManager.StoreMail(_config.MailRoot, destination))
                     {
                         mailFile.Write(buffer, 0, buffer.Length);
 
@@ -1006,7 +1010,7 @@ namespace IFS.FTP
             List<PropertyList> properties = new List<PropertyList>();
 
             // Build a path rooted in the FTP root.
-            string fullFileSpec = Path.Combine(Configuration.FTPRoot, fileSpec);
+            string fullFileSpec = Path.Combine(_ftpRoot, fileSpec);
 
             // Split full path into filename and path parts
             string fileName = Path.GetFileName(fullFileSpec);
@@ -1150,7 +1154,7 @@ namespace IFS.FTP
 
             // Build path combined with FTP root directory
             //
-            string absolutePath = Path.Combine(Configuration.FTPRoot, relativePath);
+            string absolutePath = Path.Combine(_ftpRoot, relativePath);
             string absoluteDirectory = Path.GetDirectoryName(absolutePath);
 
             //
@@ -1208,14 +1212,15 @@ namespace IFS.FTP
             {
                 password = fileSpec.GetPropertyValue(KnownPropertyNames.UserPassword);
             }
-            
-            UserToken user = Authentication.Authenticate(userName, password);            
+
+            string hostName = DirectoryServices.Instance.AddressLookup(_config.HostAddress);
+            UserToken user = Authentication.Authenticate(hostName, userName, password);
 
             if (user == null)
             {
                 // Default to guest user.
                 user = UserToken.Guest;
-                //SendFTPNoResponse(NoCode.AccessDenied, "Invalid username or password.");                
+                //SendFTPNoResponse(NoCode.AccessDenied, "Invalid username or password.");
             }
 
             return user;
@@ -1237,7 +1242,7 @@ namespace IFS.FTP
                 return false;
             }
 
-            string userDirPath = Path.Combine(Configuration.FTPRoot, userToken.HomeDirectory);
+            string userDirPath = Path.Combine(_ftpRoot, userToken.HomeDirectory);
             return fullPath.StartsWith(userDirPath, StringComparison.OrdinalIgnoreCase);
         }       
 
@@ -1284,7 +1289,9 @@ namespace IFS.FTP
 
                 OnExit(this);
             }
-        }        
+        }
+
+        private string _ftpRoot;
 
         private Thread _workerThread;
         private bool _running;

@@ -29,8 +29,9 @@ namespace IFS
     /// </summary>
     public class BreathOfLife
     {
-        public BreathOfLife()
+        public BreathOfLife(ServerConfiguration configuration)
         {
+            _configuration = configuration;
             Log.Write(LogType.Verbose, 
                 LogComponent.BreathOfLife, 
                 "Breath Of Life service starting.  Broadcast interval is {0} milliseconds.", 
@@ -53,7 +54,7 @@ namespace IFS
                 // Send BOL
                 //
 
-                Router.Instance.Send(_bolPacket, DirectoryServices.Instance.LocalHost, _bolAddress, _bolPacketType);
+                Router.Instance.Send(_bolPacket, _configuration.HostAddress.Host, _bolAddress, _bolPacketType);
 
                 Log.Write(LogType.Verbose, LogComponent.BreathOfLife, "Breath Of Life packet sent.");
 
@@ -68,6 +69,7 @@ namespace IFS
             }
         }
 
+        private ServerConfiguration _configuration;
 
         private Thread _bolThread;
 
@@ -76,7 +78,7 @@ namespace IFS
 
         /// <summary>
         /// The gold-standard BOL packet, containing the Alto ethernet bootstrap code. 
-        /// Note that this does not contain padding for the ethernet header, the router adds those two words.       
+        /// Note that this does not contain padding for the ethernet header, the router adds those two words.
         /// </summary>
         private byte[] _bolPacket = 
         {
@@ -111,7 +113,7 @@ namespace IFS
             0xc6, 0x00, 0x39, 0xba, 0x29, 0xb7, 0xed, 0x00, 0x62, 0x05, 0x09, 0xb8, 0x21, 0xb3, 0x39, 0xb4,
             0xe8, 0x00, 0xce, 0x00, 0x62, 0x05, 0x29, 0xf2, 0xb5, 0x0c, 0xb6, 0x00, 0x21, 0x9e, 0x39, 0x0e,
             0x82, 0x0d, 0xdd, 0x0d, 0xb2, 0x01, 0x01, 0xec, 0x29, 0xa3, 0x49, 0x95, 0x82, 0x0d, 0x01, 0xe8,
-            0x19, 0x93, 0x09, 0xa4, 0x21, 0x9c, 0x62, 0x04, 0x04, 0x00, 0xfd, 0xf4, 0x03, 0x01, 0x42, 0x02,            
+            0x19, 0x93, 0x09, 0xa4, 0x21, 0x9c, 0x62, 0x04, 0x04, 0x00, 0xfd, 0xf4, 0x03, 0x01, 0x42, 0x02,
         };
     }
 }

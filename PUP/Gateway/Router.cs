@@ -21,6 +21,7 @@ using SharpPcap;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
@@ -48,7 +49,12 @@ namespace IFS.Gateway
     {
         private Router()
         {
-            _localProtocolDispatcher = new PUPProtocolDispatcher();
+            _localProtocolDispatchers = new List<PUPProtocolDispatcher>();
+
+            foreach (ServerConfiguration config in Configuration.ServerConfigurations)
+            {
+                _localProtocolDispatchers.Add(new PUPProtocolDispatcher(config));
+            }
             _routingTable = new RoutingTable();
             _packetInterfaces = new List<IPacketInterface>();
 
@@ -96,7 +102,10 @@ namespace IFS.Gateway
 
         public void Shutdown()
         {
-            _localProtocolDispatcher.Shutdown();
+            foreach (PUPProtocolDispatcher dispatcher in _localProtocolDispatchers)
+            {
+                dispatcher.Shutdown();
+            }
 
             foreach (IPacketInterface iface in _packetInterfaces)
             {
@@ -195,11 +204,23 @@ namespace IFS.Gateway
             // network it's on, or specifying the current network) or our network
             // we will pass it on to the protocol suite.
             //
-            if (pup.DestinationPort.Network == 0 || pup.DestinationPort.Network == DirectoryServices.Instance.LocalHostAddress.Network)
+            bool localDispatch = false;
+            foreach (PUPProtocolDispatcher dispatcher in _localProtocolDispatchers)
             {
-                _localProtocolDispatcher.ReceivePUP(pup);
+                if (pup.DestinationPort.Network == 0 || pup.DestinationPort.Network == dispatcher.Configuration.HostAddress.Network)
+                {
+                    dispatcher.ReceivePUP(pup);
+                    localDispatch = true;
+                }
             }
-            else if (route)
+
+            if (localDispatch)
+            {
+                return;
+            }
+            
+            // Otherwise try routing it:
+            if (route)
             {
                 //
                 // Not for our network -- see if we know where to route it.
@@ -233,10 +254,10 @@ namespace IFS.Gateway
 
             //
             // Ensure this is a packet we're interested in.
-            //
+            //           
             if (Configuration.RunIFSServices &&                             // We're servicing packets
                 etherType3mbit == PupPacketBuilder.PupFrameType &&          // it's a PUP
-                (destination == DirectoryServices.Instance.LocalHost ||     // for us, or...
+                (IsHostAddressLocal(destination) ||                         // for us, or...
                  destination == 0))                                         // broadcast
             {
                 try
@@ -327,20 +348,26 @@ namespace IFS.Gateway
                 //
                 // And if it's intended for us (the IFS server) let our services have a crack at it, too.
                 //
-                if (p.DestinationPort.Host == DirectoryServices.Instance.LocalHostAddress.Host ||       // us specifically
-                    p.DestinationPort.Host == 0)                                                        // broadcast
+                bool handled = false;
+                foreach (PUPProtocolDispatcher dispatcher in _localProtocolDispatchers)
                 {
-                    if (Configuration.RunIFSServices)
+                    if (p.DestinationPort.Host == dispatcher.Configuration.HostAddress.Host ||    // us specifically
+                        p.DestinationPort.Host == 0)                                              // broadcast
                     {
-                        _localProtocolDispatcher.ReceivePUP(p);
+                        if (Configuration.RunIFSServices)
+                        {
+                            dispatcher.ReceivePUP(p);
+                            handled = true;
+                            break;
+                        }
                     }
                 }
 
                 //
                 // Send it out on the local network for anyone to see if it's not for us, or if it's a broadcast.
                 //
-                if (p.DestinationPort.Host != DirectoryServices.Instance.LocalHostAddress.Host ||       // not us
-                    p.DestinationPort.Host == 0)                                                        // broadcast
+                if (!handled ||                    // not us
+                    p.DestinationPort.Host == 0)   // broadcast
                 {
                     foreach (IPacketInterface iface in _packetInterfaces)
                     {
@@ -460,6 +487,11 @@ namespace IFS.Gateway
             }
         }
 
+        private bool IsHostAddressLocal(byte hostAddress)
+        {
+            return _localProtocolDispatchers.Where(a => a.Configuration.HostAddress.Host == hostAddress).Any();
+        }
+
         /// <summary>
         /// The various interfaces we use to send and receive 3mbit ethernet packets, encapsulated or otherwise.
         /// </summary>
@@ -489,7 +521,10 @@ namespace IFS.Gateway
 
         private static Router _router = new Router();
 
-        private PUPProtocolDispatcher _localProtocolDispatcher;
+        /// <summary>
+        /// PUP Protocol dispatchers for all of the "virtual" servers we are providing
+        /// </summary>
+        private List<PUPProtocolDispatcher> _localProtocolDispatchers;
     }
 
     public class RoutingTableEntry

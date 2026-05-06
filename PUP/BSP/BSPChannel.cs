@@ -20,10 +20,7 @@ using IFS.Logging;
 
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 
 namespace IFS.BSP
 {
@@ -39,7 +36,7 @@ namespace IFS.BSP
     /// </summary>
     public class BSPChannel
     {
-        public BSPChannel(PUP rfcPup, UInt32 socketID)
+        public BSPChannel(PUP rfcPup, UInt32 socketID, HostAddress hostAddress)
         {
             _inputLock = new ReaderWriterLockSlim();
             _outputLock = new ReaderWriterLockSlim();
@@ -72,7 +69,7 @@ namespace IFS.BSP
             }
 
             // We create our connection port using a unique socket address.
-            _serverConnectionPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, socketID);
+            _serverConnectionPort = new PUPPort(hostAddress, socketID);
 
             //
             // Init MaxPups to indicate that we need to find out what the client actually supports when we first

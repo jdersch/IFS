@@ -216,7 +216,7 @@ namespace IFS.CopyDisk
 
     public class CopyDiskWorker : BSPWorkerBase
     {
-        public CopyDiskWorker(BSPChannel channel) : base(channel)
+        public CopyDiskWorker(ServerConfiguration config, BSPChannel channel) : base(config, channel)
         {
             // Register for channel events
             channel.OnDestroy += OnChannelDestroyed;
@@ -224,7 +224,7 @@ namespace IFS.CopyDisk
             _running = true;
 
             _workerThread = new Thread(new ThreadStart(CopyDiskWorkerThreadInit));
-            _workerThread.Start();            
+            _workerThread.Start();
         }
 
         public override void Terminate()
@@ -615,7 +615,8 @@ namespace IFS.CopyDisk
                 return UserToken.Guest;
             }
 
-            UserToken user = Authentication.Authenticate(userName, password);            
+            string hostName = DirectoryServices.Instance.AddressLookup(_config.HostAddress);
+            UserToken user = Authentication.Authenticate(hostName, userName, password);
 
             return user;
 
@@ -626,9 +627,9 @@ namespace IFS.CopyDisk
         /// </summary>
         /// <param name="packName"></param>
         /// <returns></returns>
-        private static string GetPathForDiskImage(string packName)
+        private string GetPathForDiskImage(string packName)
         {
-            return Path.Combine(Configuration.CopyDiskRoot, packName);
+            return Path.Combine(_config.CopyDiskRoot, packName);
         }
 
         private Thread _workerThread;

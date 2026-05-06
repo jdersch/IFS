@@ -19,11 +19,7 @@ using IFS.Gateway;
 using IFS.Logging;
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace IFS.BSP
 {
@@ -39,8 +35,9 @@ namespace IFS.BSP
 
     public abstract class BSPWorkerBase
     {
-        public BSPWorkerBase(BSPChannel channel)
+        public BSPWorkerBase(ServerConfiguration config, BSPChannel channel)
         {
+            _config = config;
             Channel = channel;
         }
 
@@ -49,6 +46,8 @@ namespace IFS.BSP
         public WorkerExitDelegate OnExit;
 
         public BSPChannel Channel;
+
+        protected ServerConfiguration _config;
     }
 
     /// <summary>
@@ -79,7 +78,7 @@ namespace IFS.BSP
         /// A worker of the appropriate type is woken up to service the channel.
         /// </summary>
         /// <param name="p"></param>
-        public static void EstablishRendezvous(PUP p, Type workerType)
+        public static void EstablishRendezvous(ServerConfiguration config, PUP p, Type workerType)
         {
             if (p.Type != PupType.RFC)
             {
@@ -88,13 +87,13 @@ namespace IFS.BSP
             }
 
             UInt32 socketID = SocketIDGenerator.GetNextSocketID();
-            BSPChannel newChannel = new BSPChannel(p, socketID);
+            BSPChannel newChannel = new BSPChannel(p, socketID, config.HostAddress);
             newChannel.OnDestroy += OnChannelDestroyed;
             _activeChannels.Add(socketID, newChannel); 
 
             //
             // Initialize the worker for this channel.
-            InitializeWorkerForChannel(newChannel, workerType);
+            InitializeWorkerForChannel(config, newChannel, workerType);
 
             // Send RFC response to complete the rendezvous:
 
@@ -252,13 +251,13 @@ namespace IFS.BSP
             }
         }        
 
-        private static void InitializeWorkerForChannel(BSPChannel channel, Type workerType)
+        private static void InitializeWorkerForChannel(ServerConfiguration config, BSPChannel channel, Type workerType)
         {
             if (_workers.Count < Configuration.MaxWorkers)
             {
                 // Spawn new worker, which starts it running.
                 // It must be a subclass of BSPWorkerBase or this will throw.
-                BSPWorkerBase worker = (BSPWorkerBase)Activator.CreateInstance(workerType, new object[] { channel });
+                BSPWorkerBase worker = (BSPWorkerBase)Activator.CreateInstance(workerType, new object[] { config, channel });
                 
                 worker.OnExit += OnWorkerExit;
                 _workers.Add(worker);

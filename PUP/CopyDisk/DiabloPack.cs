@@ -78,8 +78,10 @@ namespace IFS.CopyDisk
         {
             _diskType = type;
             _packName = null;
-            _geometry = new DiskGeometry(type == DiabloDiskType.Diablo31 ? 203 : 406, 2, 14);
-            _sectors = new DiabloDiskSector[_geometry.Cylinders, _geometry.Tracks, _geometry.Sectors];           
+            bool isDiablo31 = type == DiabloDiskType.Diablo31;
+            // TODO: Dolphin suports 14 sectors/track, standard diablo 44 was 12.  Need more options.
+            _geometry = new DiskGeometry(isDiablo31 ? 203 : 406, 2, isDiablo31 ? 12 : 14);
+            _sectors = new DiabloDiskSector[_geometry.Cylinders, _geometry.Tracks, _geometry.Sectors];
         }
 
         public DiskGeometry Geometry

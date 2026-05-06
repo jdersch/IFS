@@ -68,9 +68,9 @@ namespace IFS
     /// </summary>
     public class MiscServicesProtocol : PUPProtocolBase
     {
-        public MiscServicesProtocol()
+        public MiscServicesProtocol(ServerConfiguration configuration)
         {
-
+            _configuration = configuration;
         }
 
         /// <summary>
@@ -140,7 +140,7 @@ namespace IFS
 
             byte[] timeString = Helpers.StringToArray(currentTime.ToString("dd-MMM-yy HH:mm:ss"));
 
-            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.SourcePort.Socket);
+            PUPPort localPort = new PUPPort(_configuration.HostAddress, p.SourcePort.Socket);
             PUP response = new PUP(PupType.StringTimeReply, p.ID, p.SourcePort, localPort, timeString);
 
             Router.Instance.SendPup(response);
@@ -179,7 +179,7 @@ namespace IFS
             time.DSTStart = 366;    // DST not specified yet
             time.DSTEnd = 366;
 
-            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+            PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
 
             // Response must contain our network number; this is used to tell clients what network they're on if they don't already know.
             PUPPort remotePort = new PUPPort(DirectoryServices.Instance.LocalNetwork, p.SourcePort.Host, p.SourcePort.Socket);
@@ -218,7 +218,7 @@ namespace IFS
                 // NOTE: This is *not* a BCPL string, just the raw characters.
                 byte[] interNetworkName = Helpers.StringToArray(hostName);
 
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP lookupReply = new PUP(PupType.AddressLookupResponse, p.ID, p.SourcePort, localPort, interNetworkName);
 
                 Router.Instance.SendPup(lookupReply);
@@ -227,7 +227,7 @@ namespace IFS
             {
                 // Unknown host, send an error reply
                 string errorString = "Unknown host.";
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
                 Router.Instance.SendPup(errorReply);
@@ -259,7 +259,7 @@ namespace IFS
             {
                 // We found an address, pack the port into the response.
                 PUPPort lookupPort = new PUPPort(address, 0);
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP lookupReply = new PUP(PupType.NameLookupResponse, p.ID, p.SourcePort, localPort, lookupPort.ToArray());
 
                 Router.Instance.SendPup(lookupReply);
@@ -270,7 +270,7 @@ namespace IFS
             {
                 // Unknown host, send an error reply
                 string errorString = "Unknown host.";
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP errorReply = new PUP(PupType.DirectoryLookupErrorReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
                 Router.Instance.SendPup(errorReply);
@@ -298,7 +298,7 @@ namespace IFS
             else
             {
                 // Send the file.
-                EFTPManager.SendFile(p.SourcePort, bootFile);
+                EFTPManager.SendFile(p.SourcePort, bootFile, _configuration.HostAddress);
             }
         }
 
@@ -333,7 +333,7 @@ namespace IFS
                 }
                 else
                 {
-                    PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                    PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                     PUP bootDirReply = new PUP(PupType.BootDirectoryReply, p.ID, p.SourcePort, localPort, ms.ToArray());
                     Router.Instance.SendPup(bootDirReply);
 
@@ -345,7 +345,7 @@ namespace IFS
             // Shuffle out any remaining data.
             if (ms.Length > 0)
             {
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP bootDirReply = new PUP(PupType.BootDirectoryReply, p.ID, p.SourcePort, localPort, ms.ToArray());
                 Router.Instance.SendPup(bootDirReply);
             }
@@ -375,12 +375,13 @@ namespace IFS
             int passwordOffset = (userName.Length % 2) == 0 ? userName.Length : userName.Length + 1;
             string password = Helpers.MesaArrayToString(p.Contents, passwordOffset + 4);
 
-            UserToken token = Authentication.Authenticate(userName, password);
+            string hostName = DirectoryServices.Instance.AddressLookup(_configuration.HostAddress);
+            UserToken token = Authentication.Authenticate(hostName, userName, password);
 
             if (token == null)
             {
                 string errorString = "Invalid username or password.";
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP errorReply = new PUP(PupType.AuthenticateNegativeResponse, p.ID, p.SourcePort, localPort, Helpers.StringToArray(errorString));
 
                 Router.Instance.SendPup(errorReply);
@@ -388,7 +389,7 @@ namespace IFS
             else
             {
                 // S'ok!
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP okReply = new PUP(PupType.AuthenticatePositiveResponse, p.ID, p.SourcePort, localPort, new byte[] { });
 
                 Router.Instance.SendPup(okReply);
@@ -412,18 +413,18 @@ namespace IFS
             //
             mailboxName = Authentication.GetUserNameFromFullName(mailboxName);
 
-            IEnumerable<string> mailList = MailManager.EnumerateMail(mailboxName);
+            IEnumerable<string> mailList = MailManager.EnumerateMail(_configuration.MailRoot, mailboxName);
 
             if (mailList == null || mailList.Count() == 0)
             {
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP noMailReply = new PUP(PupType.NoNewMailExistsReply, p.ID, p.SourcePort, localPort, new byte[] { });
 
                 Router.Instance.SendPup(noMailReply);
             }
             else
             {
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
                 PUP mailReply = new PUP(PupType.NewMailExistsReply, p.ID, p.SourcePort, localPort, Helpers.StringToArray("You've got mail!"));
 
                 Router.Instance.SendPup(mailReply);
@@ -486,7 +487,7 @@ namespace IFS
             // This is what the original Xerox IFS code did.
             // We space these out a bit to give the D-machine time to keep up, we're much much faster than they are.
             //
-            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, SocketIDGenerator.GetNextSocketID() << 16 | 0x4);
+            PUPPort localPort = new PUPPort(_configuration.HostAddress, SocketIDGenerator.GetNextSocketID() << 16 | 0x4);
 
             bool done = false;
             uint id = 0;
@@ -561,6 +562,8 @@ namespace IFS
             public UInt32 FileDate;
             public BCPLString FileName;
         }
+
+        private ServerConfiguration _configuration;
 
     }
 }

@@ -34,8 +34,9 @@ namespace IFS.Gateway
     /// </summary>
     public class GatewayInformationProtocol : PUPProtocolBase
     {
-        public GatewayInformationProtocol()
+        public GatewayInformationProtocol(ServerConfiguration config)
         {
+            _configuration = config;
             _gatewayInfoThread = new Thread(GatewayInformationWorker);
             _gatewayInfoThread.Start();
         }
@@ -88,7 +89,7 @@ namespace IFS.Gateway
             
             byte[] infoArray = GetGatewayInformationArray();
 
-            PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, p.DestinationPort.Socket);
+            PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
 
             // Response must contain our network number; this is used to tell clients what network they're on if they don't already know.
             PUPPort remotePort = new PUPPort(DirectoryServices.Instance.LocalNetwork, p.SourcePort.Host, p.SourcePort.Socket);
@@ -98,7 +99,7 @@ namespace IFS.Gateway
             Router.Instance.SendPup(response);
         }
 
-        private static byte[] GetGatewayInformationArray()
+        private byte[] GetGatewayInformationArray()
         {
             //
             // We build the gateway information response from the RoutingTable that the Router maintains.
@@ -113,8 +114,8 @@ namespace IFS.Gateway
             {
                 GatewayInformation info = new GatewayInformation();
                 info.TargetNet = knownNetworks[i];
-                info.GatewayNet = DirectoryServices.Instance.LocalNetwork;
-                info.GatewayHost = DirectoryServices.Instance.LocalHost;
+                info.GatewayNet = _configuration.HostAddress.Network;
+                info.GatewayHost = _configuration.HostAddress.Host;
                 info.HopCount = 0; // all networks are directly connected
 
                 byte[] entry = Serializer.Serialize(info);
@@ -151,7 +152,7 @@ namespace IFS.Gateway
                 byte[] infoArray = GetGatewayInformationArray();
 
                 // From us, on socket 2
-                PUPPort localPort = new PUPPort(DirectoryServices.Instance.LocalHostAddress, 2);
+                PUPPort localPort = new PUPPort(_configuration.HostAddress, 2);
 
                 //
                 // The set of known networks is by default the set of directly-connected networks.
@@ -171,6 +172,7 @@ namespace IFS.Gateway
             }
         }
 
+        private ServerConfiguration _configuration;
         private Thread _gatewayInfoThread;
 
     }

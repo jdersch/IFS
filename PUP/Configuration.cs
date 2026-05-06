@@ -21,8 +21,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace IFS
 {
@@ -33,6 +31,38 @@ namespace IFS
         {
 
         }
+    }
+
+    /// <summary>
+    /// Configuration information for a virtual server instance
+    /// </summary>
+    public class ServerConfiguration
+    {
+        public ServerConfiguration(bool isGatewayServer, HostAddress hostAddress, string ftpRoot, string copyDiskRoot, string bootRoot, string mailRoot) 
+        {
+            _isGatewayServer = isGatewayServer;
+            _hostAddress = hostAddress;
+            _ftpRoot = ftpRoot;
+            _copyDiskRoot = copyDiskRoot;
+            _bootRoot = bootRoot;
+            _mailRoot = mailRoot;
+        }
+
+        public bool IsGatewayServer => _isGatewayServer;
+
+        public HostAddress HostAddress => _hostAddress;
+        public string FTPRoot => _ftpRoot;
+        public string CopyDiskRoot => _copyDiskRoot;
+
+        public string BootRoot => _bootRoot;
+        public string MailRoot => _mailRoot;
+
+        private bool _isGatewayServer;
+        private HostAddress _hostAddress;
+        private string _ftpRoot;
+        private string _copyDiskRoot;
+        private string _bootRoot;
+        private string _mailRoot;
     }
 
 
@@ -49,24 +79,46 @@ namespace IFS
             // Ensure that required values were read from the config file.  If not,
             // throw so that startup is aborted.
             //
-            if (string.IsNullOrWhiteSpace(FTPRoot) || !Directory.Exists(FTPRoot))
+            foreach (string root in FTPRoots)
             {
-                throw new InvalidConfigurationException("FTP root path is invalid.");
+                if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+                {
+                    throw new InvalidConfigurationException($"FTP root path '{root}' is invalid.");
+                }
             }
 
             if (string.IsNullOrWhiteSpace(CopyDiskRoot) || !Directory.Exists(CopyDiskRoot))
             {
-                throw new InvalidConfigurationException("CopyDisk root path is invalid.");
+                throw new InvalidConfigurationException($"CopyDisk root path '{CopyDiskRoot}' is invalid.");
             }
 
             if (string.IsNullOrWhiteSpace(BootRoot) || !Directory.Exists(BootRoot))
             {
-                throw new InvalidConfigurationException("Boot root path is invalid.");
+                throw new InvalidConfigurationException($"Boot root path '{BootRoot}' is invalid.");
             }
 
-            if (string.IsNullOrWhiteSpace(BootRoot) || !Directory.Exists(MailRoot))
+            if (string.IsNullOrWhiteSpace(MailRoot) || !Directory.Exists(MailRoot))
             {
-                throw new InvalidConfigurationException("Mail root path is invalid.");
+                throw new InvalidConfigurationException($"Mail root path '{MailRoot}' is invalid.");
+            }
+
+            // Ensure sane values for host numbers:
+            // Check for duplicates:
+            if (ServerHosts.Length != ServerHosts.Distinct().Count())
+            {
+                throw new InvalidConfigurationException("Duplicated entry in ServerHosts");
+            }
+
+            _serverConfigurations = new List<ServerConfiguration>();
+            foreach (byte host in ServerHosts)
+            {
+                // Disallow host 0 and 377 (broadcast, BOL)
+                if (host == 0 || host == 255)
+                {
+                    throw new InvalidConfigurationException($"Invalid reserved host address {host} specified in ServerHosts");
+                }
+
+                _serverConfigurations.Add(GetServerConfiguration(_serverConfigurations.Count()));
             }
 
             if (MaxWorkers < 1)
@@ -105,32 +157,32 @@ namespace IFS
         /// <summary>
         /// The network that this server lives on
         /// </summary>
-        public static readonly int ServerNetwork;
+        private static readonly byte ServerNetwork;
 
         /// <summary>
-        /// The host number for this server.
+        /// The host numbers for the servers.
         /// </summary>
-        public static readonly int ServerHost;
+        private static readonly byte[] ServerHosts;
 
         /// <summary>
-        /// The root directory for the FTP file store.
+        /// The root directories for the FTP file stores for each server.
         /// </summary>
-        public static readonly string FTPRoot;
+        private static readonly string[] FTPRoots;
 
         /// <summary>
-        /// The root directory for the CopyDisk file store.
+        /// The root directory for the CopyDisk file store (only one per IFS instance)
         /// </summary>
-        public static readonly string CopyDiskRoot;
+        private static readonly string CopyDiskRoot;
 
         /// <summary>
-        /// The root directory for the Boot file store.
+        /// The root directory for the Boot file store (only one per IFS instance)
         /// </summary>
-        public static readonly string BootRoot;
+        private static readonly string BootRoot;
 
         /// <summary>
-        /// The root directory for the Mail file store.
+        /// The root directory for the Mail file store (only one per IFS instance)
         /// </summary>
-        public static readonly string MailRoot;
+        private static readonly string MailRoot;
 
         /// <summary>
         /// The maximum number of worker threads for protocol handling.
@@ -152,6 +204,33 @@ namespace IFS
         /// </summary>
         public static readonly int BOLDelay;
 
+        /// <summary>
+        /// Individual "virtual" server configurations:
+        /// </summary>
+        public static IReadOnlyList<ServerConfiguration> ServerConfigurations => _serverConfigurations;
+
+
+        /// <summary>
+        /// Returns an oh-so convenient configuration object for the server at the specified index.
+        /// </summary>
+        /// <param name="index"></param>
+        /// <returns></returns>
+        /// <exception cref="ArgumentOutOfRangeException"></exception>
+        private static ServerConfiguration GetServerConfiguration(int index)
+        {
+            if (index < 0 || index > ServerHosts.Length -1)
+            {
+                throw new ArgumentOutOfRangeException("index");
+            }
+
+            return new ServerConfiguration(
+                index == 0,     // Only the first server specified provides gateway services.
+                new HostAddress(ServerNetwork, ServerHosts[index]),
+                FTPRoots[index],
+                CopyDiskRoot,
+                BootRoot,
+                MailRoot);
+        }
 
         private static void ReadConfiguration()
         {
@@ -195,7 +274,8 @@ namespace IFS
 
                     // Reflect over the public, static properties in this class and see if the parameter matches one of them
                     // If not, it's an error, if it is then we attempt to coerce the value to the correct type.
-                    System.Reflection.FieldInfo[] info = typeof(Configuration).GetFields(BindingFlags.Public | BindingFlags.Static);
+                    // TODO: do this by attribute
+                    System.Reflection.FieldInfo[] info = typeof(Configuration).GetFields(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
 
                     bool bMatch = false;
                     foreach (FieldInfo field in info)
@@ -217,6 +297,13 @@ namespace IFS
                                         {
                                             bool b = bool.Parse(value);
                                             field.SetValue(null, b);
+                                        }
+                                        break;
+
+                                    case "Byte":
+                                        {
+                                            byte v = byte.Parse(value);
+                                            field.SetValue(null, v);
                                         }
                                         break;
 
@@ -244,6 +331,28 @@ namespace IFS
                                             field.SetValue(null, Enum.Parse(typeof(LogComponent), value, true));
                                         }
                                         break;
+
+                                    case "Byte[]":
+                                        {
+                                            string[] values = value.Split(',');
+                                            List<byte> ints = new List<byte>(values.Length);
+
+                                            foreach (string v in values)
+                                            {
+                                                ints.Add(byte.Parse(v));
+                                            }
+
+                                            field.SetValue(null, ints.ToArray());
+                                        }
+                                        break;
+
+                                    case "String[]":
+                                        {
+                                            string[] values = value.Split(',');
+                                            field.SetValue(null, values.ToArray());
+                                        }
+                                        break;
+
                                 }
                             }
                             catch
@@ -262,5 +371,7 @@ namespace IFS
                 }
             }
         }
+
+        private static List<ServerConfiguration> _serverConfigurations;
     }
 }

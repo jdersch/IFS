@@ -68,7 +68,7 @@ namespace IFS
             }
         }
 
-        public static UserToken Authenticate(string userName, string password)
+        public static UserToken Authenticate(string hostName, string userName, string password)
         {
             //
             // Look up the user
@@ -79,7 +79,7 @@ namespace IFS
             // Verify that the username's host/registry (if present) matches
             // our hostname.
             //
-            if (ValidateUserRegistry(userName))
+            if (ValidateUserRegistry(userName, hostName))
             {
                 //
                 // Strip off any host/registry on the username, lookup based on username only.
@@ -210,14 +210,14 @@ namespace IFS
         /// </summary>
         /// <param name="fullUserName"></param>
         /// <returns></returns>
-        public static bool ValidateUserRegistry(string fullUserName)
+        public static bool ValidateUserRegistry(string fullUserName, string hostName)
         {
             if (fullUserName.Contains("."))
             {
                 // Strip off the host/registry name and compare to our hostname.
-                string hostName = fullUserName.Substring(fullUserName.IndexOf(".") + 1);
+                string hostNameFromUsername = fullUserName.Substring(fullUserName.IndexOf(".") + 1);
 
-                return hostName.ToLowerInvariant() == DirectoryServices.Instance.LocalHostName.ToLowerInvariant();
+                return hostNameFromUsername.ToLowerInvariant() == hostName.ToLowerInvariant();
             }
             else
             {
