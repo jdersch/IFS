@@ -58,7 +58,10 @@ namespace IFS.FTP
         public static readonly string DateReceived = "Date-Received";
         public static readonly string Opened = "Opened";
         public static readonly string Deleted = "Deleted";
-    }         
+
+        // Internal only, not serialized
+        public static readonly string FullFilename = "Full-Filename";
+    }
 
     /// <summary>
     /// Defines an FTP PropertyList and methods to work with the contents of one.
@@ -72,7 +75,7 @@ namespace IFS.FTP
     ///    ((Server-Filename TESTFILE.7)(Byte-Size 36))
     /// 
     /// This scheme has the advantage of being human readable, although it will require some form of 
-    /// scanner or interpreter.  Nevertheless, this is a rigid format, with minimum flexibility ni form; FTP is
+    /// scanner or interpreter.  Nevertheless, this is a rigid format, with minimum flexibility in form; FTP is
     /// a machine-to-machine protocol, not a programming language.
     /// 
     /// The first item in each property (delimited by a left parenthesis and a space) is the property name,
@@ -118,7 +121,7 @@ namespace IFS.FTP
         /// <param name="endIndex"></param>
         public PropertyList(string input, int startIndex, out int endIndex) : this()
         {
-            endIndex = ParseList(input, startIndex);            
+            endIndex = ParseList(input, startIndex);
         }
 
         /// <summary>
@@ -222,11 +225,14 @@ namespace IFS.FTP
             // Opening paren
             sb.Append("(");
 
-            foreach(string key in _propertyList.Keys)
+            foreach (string key in _propertyList.Keys)
             {
-                foreach (string value in _propertyList[key])
+                if (key != KnownPropertyNames.FullFilename.ToLowerInvariant())
                 {
-                    sb.AppendFormat("({0} {1})", key, EscapeString(value));
+                    foreach (string value in _propertyList[key])
+                    {
+                        sb.AppendFormat("({0} {1})", key, EscapeString(value));
+                    }
                 }
             }
 

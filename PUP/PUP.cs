@@ -312,17 +312,17 @@ namespace IFS
             if (Length > length)
             {
                 throw new InvalidOperationException("Length field in PUP is invalid.");
-            }            
+            }
 
             TransportControl = _rawData[2];
-            Type = (PupType)_rawData[3];            
+            Type = (PupType)_rawData[3];
             ID = Helpers.ReadUInt(_rawData, 4);
             DestinationPort = new PUPPort(_rawData, 8);
             SourcePort = new PUPPort(_rawData, 14);
 
             int contentLength = Length - PUP_HEADER_SIZE - PUP_CHECKSUM_SIZE;
             Contents = new byte[contentLength];
-            Array.Copy(_rawData, 20, Contents, 0, contentLength);
+            Array.Copy(_rawData, PUP_HEADER_SIZE, Contents, 0, contentLength);
 
             // Length is the number of valid bytes in the PUP, which may be an odd number.
             // There are always an even number of bytes in the PUP, and the checksum
@@ -353,12 +353,13 @@ namespace IFS
         private ushort CalculateChecksum()
         {
             uint sum = 0;
+            ushort length = Helpers.ReadUShort(_rawData, 0);
+            int checksumOffset = (length % 2) == 0 ? length - PUP_CHECKSUM_SIZE : length - PUP_CHECKSUM_SIZE + 1;
 
             // Sum over everything except the checksum word
-            for (int i=0; i< _rawData.Length - PUP_CHECKSUM_SIZE; i+=2)
+            for (int i=0; i < checksumOffset; i+=2)
             {
                 ushort nextWord = Helpers.ReadUShort(_rawData, i);
-                //ushort nextWord = (ushort)((_rawData[i + 1] << 8) | _rawData[i]);
 
                 // 2's complement add with "end-around" carry results in
                 // 1's complement add

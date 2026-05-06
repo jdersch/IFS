@@ -360,7 +360,7 @@ namespace IFS.CopyDisk
                                     using (FileStream packStream = new FileStream(diskPath, FileMode.Open, FileAccess.Read))
                                     {
                                         // TODO: determine pack type rather than assuming Diablo 31
-                                        _pack = new DiabloPack(DiabloDiskType.Diablo31);
+                                        _pack = new DiabloPack(DiabloDiskType.Diablo44);
                                         _pack.Load(packStream, diskPath, true /* reverse byte order */);
                                     }
 
@@ -405,7 +405,7 @@ namespace IFS.CopyDisk
                                 // Create a new in-memory disk image.  We will write it out to disk when the transfer is completed.
                                 //                                                                   
                                 // TODO: determine pack type based on disk params rather than assuming Diablo 31
-                                _pack = new DiabloPack(DiabloDiskType.Diablo31);
+                                _pack = new DiabloPack(DiabloDiskType.Diablo44);
                                 _pack.PackName = diskPath;
                                                            
 

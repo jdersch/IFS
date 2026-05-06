@@ -78,7 +78,7 @@ namespace IFS.CopyDisk
         {
             _diskType = type;
             _packName = null;
-            _geometry = new DiskGeometry(type == DiabloDiskType.Diablo31 ? 203 : 406, 2, 12);
+            _geometry = new DiskGeometry(type == DiabloDiskType.Diablo31 ? 203 : 406, 2, 14);
             _sectors = new DiabloDiskSector[_geometry.Cylinders, _geometry.Tracks, _geometry.Sectors];           
         }
 

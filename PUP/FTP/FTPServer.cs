@@ -18,6 +18,7 @@
 using IFS.BSP;
 using IFS.Logging;
 
+using Microsoft.Extensions.FileSystemGlobbing;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -398,10 +399,16 @@ namespace IFS.FTP
 
             if (AuthenticateUser(fileSpec) == null)
             {
-                return;                
+                return;
             }
 
-            List<PropertyList> files = EnumerateFiles(fullPath);
+            int version = -1;
+            if (fileSpec.ContainsPropertyValue("version"))
+            {
+                int.TryParse(fileSpec.GetPropertyValue("version"), out version);
+            }
+
+            List<PropertyList> files = EnumerateFiles(fullPath, version);
 
 
             if (newEnumerate)
@@ -451,7 +458,25 @@ namespace IFS.FTP
                 return;
             }
 
-            List<PropertyList> files = EnumerateFiles(fullPath);
+            // TODO: factor this logic out into EnumerateFiles
+            int version = -1;
+            if (fileSpec.ContainsPropertyValue("version"))
+            {
+                int.TryParse(fileSpec.GetPropertyValue("version"), out version);
+            }
+
+            if (version == -1)
+            {
+                // See if the filename ends with a version tag (!<version>):
+                version = VersionedDirectory.GetPathRevision(fullPath);
+                if (version != -1)
+                {
+                    // has a version tag, strip it from the path (so EnumerateFiles will find it)
+                    fullPath = VersionedDirectory.GetPathWithoutRevision(fullPath);
+                }
+            }
+
+            List<PropertyList> files = EnumerateFiles(fullPath, version);
 
             // Send each list to the user, followed by the actual file data.
             //
@@ -461,7 +486,7 @@ namespace IFS.FTP
                 // Tell the client about the file we're about to send
                 SendFTPResponse(FTPCommand.HereIsPropertyList, matchingFile);
 
-                // Await confirmation:                
+                // Await confirmation:
                 byte[] data = null;
                 FTPCommand yesNo = ReadNextCommandWithData(out data);
 
@@ -670,7 +695,13 @@ namespace IFS.FTP
                 return;
             }
 
-            List<PropertyList> files = EnumerateFiles(fullPath);
+            int version = -1;
+            if (fileSpec.ContainsPropertyValue("version"))
+            {
+                int.TryParse(fileSpec.GetPropertyValue("version"), out version);
+            }
+
+            List<PropertyList> files = EnumerateFiles(fullPath, version);
 
             // Send each list to the user, followed by the actual file data.
             //
@@ -958,8 +989,7 @@ namespace IFS.FTP
         /// <returns></returns>
         private FileStream OpenFile(PropertyList fileSpec, bool readOnly)
         {
-            string absolutePath = Path.Combine(Configuration.FTPRoot, fileSpec.GetPropertyValue(KnownPropertyNames.Directory), fileSpec.GetPropertyValue(KnownPropertyNames.ServerFilename));
-
+            string absolutePath = fileSpec.GetPropertyValue(KnownPropertyNames.FullFilename);
             return new FileStream(absolutePath, FileMode.Open, readOnly ? FileAccess.Read : FileAccess.ReadWrite);
         }
 
@@ -971,9 +1001,9 @@ namespace IFS.FTP
         /// </summary>
         /// <param name="fileSpec"></param>
         /// <returns></returns>
-        private List<PropertyList> EnumerateFiles(string fileSpec)
+        private List<PropertyList> EnumerateFiles(string fileSpec, int revision)
         {
-            List<PropertyList> properties = new List<PropertyList>();            
+            List<PropertyList> properties = new List<PropertyList>();
 
             // Build a path rooted in the FTP root.
             string fullFileSpec = Path.Combine(Configuration.FTPRoot, fileSpec);
@@ -982,21 +1012,28 @@ namespace IFS.FTP
             string fileName = Path.GetFileName(fullFileSpec);
             string path = Path.GetDirectoryName(fullFileSpec);
 
-            // Find all files that match the fileName (which may be a pattern to match or a complete file name for a single file)
-            // These will be absolute paths.
-            string[] matchingFiles = Directory.GetFiles(path, fileName, SearchOption.TopDirectoryOnly);
+            // Grab the full file list, with revision metadata.
+            VersionedDirectory versionedDirectory = new VersionedDirectory(path);
 
-            // Find all directories that match the fileName, as above.
-            string[] matchingDirectories = Directory.GetDirectories(path, fileName, SearchOption.TopDirectoryOnly);
+            // Determine the version of the file(s) to return:
+            // - if no revision was specified, we return the newest revision of the file(s) requested
+            // - if a revision was specified, we return that revision (if it exists) of the file(s) or nothing (if there's no matching revision)
+            List<FileInfo> filesToRetreive = versionedDirectory.GetMatchingFiles(fileName, revision);
+            
+
+            // Find all directories that match the fileName, but we also automatically include any versioned directories.
+            // Unlike with files, we enumerate all directories at all revision levels (this is to make it easier to navigate
+            // directory heirarchies with the Alto FTP program.
+            List<string> matchingDirectories = Directory.GetDirectories(path, fileName, SearchOption.TopDirectoryOnly).ToList();
+            matchingDirectories.AddRange(Directory.GetDirectories(path, fileName + "!*", SearchOption.TopDirectoryOnly));
 
             // Build a property list containing the required properties for the directories
             // For now, we ignore any Desired-Property requests (this is legal) and return all properties we know about.
             foreach (string matchingDirectory in matchingDirectories)
             {
-                string nameOnly = String.Format("{0}  <directory>", Path.GetFileName(matchingDirectory));
+                string nameOnly = String.Format("<{0}>", Path.GetFileName(matchingDirectory));
 
                 PropertyList dirProps = new PropertyList();
-
                 dirProps.SetPropertyValue(KnownPropertyNames.ServerFilename, nameOnly);
                 dirProps.SetPropertyValue(KnownPropertyNames.Directory, path);
                 dirProps.SetPropertyValue(KnownPropertyNames.NameBody, nameOnly);
@@ -1012,21 +1049,19 @@ namespace IFS.FTP
 
             // Build a property list containing the required properties for the files.
             // For now, we ignore any Desired-Property requests (this is legal) and return all properties we know about.
-            foreach (string matchingFile in matchingFiles)
+            foreach (FileInfo matchingFile in filesToRetreive)
             {
-                string nameOnly = Path.GetFileName(matchingFile);
-
                 PropertyList fileProps = new PropertyList();
-
-                fileProps.SetPropertyValue(KnownPropertyNames.ServerFilename, nameOnly);
+                fileProps.SetPropertyValue(KnownPropertyNames.ServerFilename, matchingFile.FileName);
+                fileProps.SetPropertyValue(KnownPropertyNames.FullFilename, matchingFile.FullPath);
                 fileProps.SetPropertyValue(KnownPropertyNames.Directory, path);
-                fileProps.SetPropertyValue(KnownPropertyNames.NameBody, nameOnly);
+                fileProps.SetPropertyValue(KnownPropertyNames.NameBody, matchingFile.FileName);
                 fileProps.SetPropertyValue(KnownPropertyNames.Type, "Binary");                  // We treat all files as binary for now
                 fileProps.SetPropertyValue(KnownPropertyNames.ByteSize, "8");                   // 8-bit bytes, please.
                 fileProps.SetPropertyValue(KnownPropertyNames.Version, "1");                    // No real versioning support
-                fileProps.SetPropertyValue(KnownPropertyNames.CreationDate, File.GetCreationTime(matchingFile).ToString("dd-MMM-yy HH:mm:ss"));
-                fileProps.SetPropertyValue(KnownPropertyNames.WriteDate, File.GetLastWriteTime(matchingFile).ToString("dd-MMM-yy HH:mm:ss"));
-                fileProps.SetPropertyValue(KnownPropertyNames.ReadDate, File.GetLastAccessTime(matchingFile).ToString("dd-MMM-yy HH:mm:ss"));
+                fileProps.SetPropertyValue(KnownPropertyNames.CreationDate, File.GetCreationTime(matchingFile.FullPath).ToString("dd-MMM-yy HH:mm:ss"));
+                fileProps.SetPropertyValue(KnownPropertyNames.WriteDate, File.GetLastWriteTime(matchingFile.FullPath).ToString("dd-MMM-yy HH:mm:ss"));
+                fileProps.SetPropertyValue(KnownPropertyNames.ReadDate, File.GetLastAccessTime(matchingFile.FullPath).ToString("dd-MMM-yy HH:mm:ss"));
 
                 properties.Add(fileProps);
             }
@@ -1045,7 +1080,7 @@ namespace IFS.FTP
         private string BuildAndValidateFilePath(PropertyList fileSpec)
         {
             //
-            // Pull the file identifying properties from fileSpec and see what we can make of them.            
+            // Pull the file identifying properties from fileSpec and see what we can make of them.
             //
             string serverFilename = fileSpec.GetPropertyValue(KnownPropertyNames.ServerFilename);
             string directory = fileSpec.GetPropertyValue(KnownPropertyNames.Directory);
@@ -1254,8 +1289,8 @@ namespace IFS.FTP
         private Thread _workerThread;
         private bool _running;
 
-        // 4 megabytes as the maximum file size to accept.
-        private const int _maxFileSize = 4096 * 1024;
+        // 64 megabytes as the maximum file size to accept.
+        private const int _maxFileSize = 65536 * 1024;
 
         /// <summary>
         /// The last set of mail files retrieved via a Retrieve-Mail operation.

@@ -41,6 +41,11 @@ namespace IFS
         /// Non-existent address
         /// </summary>
         public static HostAddress Empty = new HostAddress(0, 0);
+
+        public override string ToString()
+        {
+            return $"#{Helpers.ToOctal(Network)}#{Helpers.ToOctal(Host)}";
+        }
     }
 
     /// <summary>

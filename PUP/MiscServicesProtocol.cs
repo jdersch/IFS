@@ -264,7 +264,7 @@ namespace IFS
 
                 Router.Instance.SendPup(lookupReply);
 
-                Log.Write(LogType.Verbose, LogComponent.MiscServices, "Address is '{0}'", address);
+                Log.Write(LogType.Verbose, LogComponent.MiscServices, "Address is '{0}'", address.ToString());
             }
             else
             {
@@ -287,13 +287,13 @@ namespace IFS
             // 
             ushort fileNumber = (ushort)p.ID;
 
-            Log.Write(LogType.Verbose, LogComponent.MiscServices, "Boot file request is for file {0}.", fileNumber);
+            Log.Write(LogType.Verbose, LogComponent.MiscServices, "Boot file request is for file {0}.", Helpers.ToOctal(fileNumber));
 
             FileStream bootFile = BootServer.GetStreamForNumber(fileNumber);
 
             if (bootFile == null)
             {
-                Log.Write(LogType.Warning, LogComponent.MiscServices, "Boot file {0} does not exist or could not be opened.", fileNumber);
+                Log.Write(LogType.Warning, LogComponent.MiscServices, "Boot file {0} does not exist or could not be opened.", Helpers.ToOctal(fileNumber));
             }
             else
             {

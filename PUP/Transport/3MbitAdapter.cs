@@ -300,7 +300,7 @@ namespace IFS.Transport
             byte[] encapsulatedPacket = new byte[decodedPacket.Length + 2];
             Array.Copy(decodedPacket, 0, encapsulatedPacket, 2, decodedPacket.Length);
 
-            int encapsulatedLength = decodedPacket.Length / 2 + 2;
+            int encapsulatedLength = decodedPacket.Length / 2;
             encapsulatedPacket[0] = (byte)(encapsulatedLength >> 8);
             encapsulatedPacket[1] = (byte)encapsulatedLength;
 
@@ -355,7 +355,7 @@ namespace IFS.Transport
             Log.Write(LogType.Verbose, LogComponent.E3Mbit, $"Decoding duration buffer of length {durationBuf.Length}.");
 
             List<byte> byteBuffer = new List<byte>();
-            bool[] bitBuf = new bool[8 * PUP.MAX_PUP_SIZE];
+            bool[] bitBuf = new bool[64 * PUP.MAX_PUP_SIZE];
             const int RECV_WIDTH = 2; // Recv values are in units of 2 ns (to fit in byte)
 
             // Convert timings in durationBuf into high/low vector in bitBuf
@@ -542,7 +542,19 @@ namespace IFS.Transport
         {
             if (n >= 0 && n <= _ledStream?.Length)
             {
-                _ledStream?[n]?.WriteLine($"{brightness}");
+                // We do this a couple of times in a try/catch loop because apparently the write can fail?  Yow.
+                for (int retry = 0; retry < 3; retry++)
+                {
+                    try
+                    {
+                        _ledStream?[n]?.WriteLine($"{brightness}");
+                        break;
+                    }
+                    catch
+                    {
+                        // Whatever.
+                    }
+                }
             }
         }
 

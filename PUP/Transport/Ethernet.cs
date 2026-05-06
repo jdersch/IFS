@@ -16,15 +16,13 @@
 */
 
 using System;
-using PcapDotNet.Base;
-using PcapDotNet.Core;
-using PcapDotNet.Core.Extensions;
-using PcapDotNet.Packets;
-using PcapDotNet.Packets.Ethernet;
+using SharpPcap;
 using IFS.Logging;
 using System.IO;
 using System.Threading;
 using IFS.Gateway;
+using System.Net.NetworkInformation;
+using PacketDotNet;
 
 namespace IFS.Transport
 {
@@ -37,7 +35,7 @@ namespace IFS.Transport
     /// </summary>
     public class Ethernet : IPacketInterface
     {
-        public Ethernet(LivePacketDevice iface)
+        public Ethernet(ILiveDevice iface)
         {
             _interface = iface;
         }
@@ -57,7 +55,7 @@ namespace IFS.Transport
         public void Shutdown()
         {
             _routerCallback = null;
-            _communicator.Break();
+            _interface.Close();
         }
         
         public void Send(PUP p)
@@ -82,51 +80,53 @@ namespace IFS.Transport
 
         private void SendFrame(byte[] encapsulatedFrame)
         {
-            MacAddress destinationMac = new MacAddress(_10mbitBroadcast);
 
-            // Build the outgoing packet; place the source/dest addresses, type field and the PUP data.
-            EthernetLayer ethernetLayer = new EthernetLayer
-            {
-                Source = _interface.GetMacAddress(),
-                Destination = destinationMac,
-                EtherType = (EthernetType)_3mbitFrameType,
-            };
+            EthernetPacket p = new EthernetPacket(
+                _interface.MacAddress,      // Source address
+                _10mbitBroadcast,           // Destnation (broadcast)
+                (EthernetType)_3mbitFrameType);
 
-            PayloadLayer payloadLayer = new PayloadLayer
-            {
-                Data = new Datagram(encapsulatedFrame),
-            };
-
-            PacketBuilder builder = new PacketBuilder(ethernetLayer, payloadLayer);
-
-            // Send it over the 'net!
-            _communicator.SendPacket(builder.Build(DateTime.Now));
+            p.PayloadData = encapsulatedFrame;
+            _interface.SendPacket(p);
         }
 
-        private void ReceiveCallback(Packet p)
-        {
-            if ((int)p.Ethernet.EtherType == _3mbitFrameType)
+        private void ReceiveCallback(object sender, PacketCapture e)
+        { 
+            if (e.GetPacket().LinkLayerType != LinkLayers.Ethernet)
             {
-                Log.Write(LogType.Verbose, LogComponent.Ethernet, "3mbit pup received.");
-
-                MemoryStream packetStream = p.Ethernet.Payload.ToMemoryStream();
-                _routerCallback(packetStream, this);
+                return;
             }
-            else
+
+            
+            try
             {
-                // Not an encapsulated 3mbit frame, Discard the packet.  We will not log this, so as to keep noise down. 
-                // Log.Write(LogType.Verbose, LogComponent.Ethernet, "Not a PUP (type 0x{0:x}.  Dropping.", p.Ethernet.EtherType);
+                EthernetPacket packet = (EthernetPacket)Packet.ParsePacket(LinkLayers.Ethernet, e.GetPacket().Data);
+                if ((int)packet.Type == _3mbitFrameType)
+                {
+                    Log.Write(LogType.Verbose, LogComponent.Ethernet, "3mbit pup received.");
+
+                    MemoryStream packetStream = new MemoryStream(packet.PayloadData);
+                    _routerCallback(packetStream, this);
+                }
+                else
+                {
+                    // Not an encapsulated 3mbit frame, Discard the packet.  We will not log this, so as to keep noise down. 
+                    // Log.Write(LogType.Verbose, LogComponent.Ethernet, "Not a PUP (type 0x{0:x}.  Dropping.", p.Ethernet.EtherType);
+                }
+            }
+            catch (Exception ex)
+            {
+                // TODO: log this
             }
         }
 
         private void Open(bool promiscuous, int timeout)
         {
-            _communicator = _interface.Open(
-                0xffff, 
-                promiscuous ? PacketDeviceOpenAttributes.Promiscuous : PacketDeviceOpenAttributes.None, 
-                timeout);
-
-            _communicator.SetKernelMinimumBytesToCopy(1);
+            DeviceConfiguration config = new DeviceConfiguration();
+            config.Mode = promiscuous ? DeviceModes.Promiscuous | DeviceModes.MaxResponsiveness : DeviceModes.MaxResponsiveness;
+            config.ReadTimeout = timeout;
+            config.Immediate = true;
+            _interface.Open(config);
         }
 
         /// <summary>
@@ -134,11 +134,11 @@ namespace IFS.Transport
         /// </summary>
         private void BeginReceive()
         {
-            _communicator.ReceivePackets(-1, ReceiveCallback);
+            _interface.OnPacketArrival += ReceiveCallback;
+            _interface.StartCapture();
         }        
 
-        private LivePacketDevice _interface;
-        private PacketCommunicator _communicator;
+        private ILiveDevice _interface;
         private ReceivedPacketCallback _routerCallback;
 
         // Constants
@@ -147,7 +147,7 @@ namespace IFS.Transport
         private readonly int _3mbitFrameType = 0xbeef;     // easy to identify, ostensibly unused by anything of any import        
 
         // 10mbit broadcast address
-        private UInt48 _10mbitBroadcast = (UInt48)0xffffffffffff;
+        private PhysicalAddress _10mbitBroadcast = new PhysicalAddress(new byte[] { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff });
 
     }
 }

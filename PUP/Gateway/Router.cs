@@ -17,7 +17,7 @@
 
 using IFS.Logging;
 using IFS.Transport;
-using PcapDotNet.Core;
+using SharpPcap;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -111,7 +111,7 @@ namespace IFS.Gateway
             }
         }
 
-        public void RegisterRAWInterface(LivePacketDevice iface)
+        public void RegisterRAWInterface(ILiveDevice iface)
         {
             Ethernet enet = new Ethernet(iface);
             _packetInterfaces.Add(enet);
@@ -165,7 +165,7 @@ namespace IFS.Gateway
             // Check the destination network.  If it's 0 (meaning the sender doesn't know
             // what network it's on, or wants it to go out to whatever network it's currently
             // connected to) or it's destined for our network, we send it out directly through 
-            // the local network interface.
+            // the local network interface(s).
             //
             if (p.DestinationPort.Network == 0 ||
                 p.DestinationPort.Network == DirectoryServices.Instance.LocalNetwork)
@@ -258,7 +258,6 @@ namespace IFS.Gateway
                     if (iface != receivingInterface)
                     {
                         packetStream.Seek(0, SeekOrigin.Begin);
-                        Console.WriteLine("Sending to {0}", iface);
                         iface.Send(packetStream);
                     }
                 }

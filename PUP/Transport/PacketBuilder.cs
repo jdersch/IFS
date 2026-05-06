@@ -53,8 +53,8 @@ namespace IFS.Transport
         public static byte[] BuildEthernetFrameFromRawData(byte[] data, byte source, byte destination, ushort frameType)
         {
             // Build the full raw frame data; this is:
-            // 2nd word: 3mbit destination / source bytes
-            // 3rd word: frame type
+            // 1st word: 3mbit destination / source bytes
+            // 2nd word: frame type
             byte[] newFrame = new byte[4 + data.Length];
 
             // addressing

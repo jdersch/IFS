@@ -17,10 +17,11 @@
 
 using IFS.Gateway;
 using IFS.IfsConsole;
-using PcapDotNet.Core;
-using PcapDotNet.Core.Extensions;
+using SharpPcap;
+using SharpPcap.LibPcap;
 using System;
 using System.Net.NetworkInformation;
+using System.Xml.Linq;
 
 namespace IFS
 {
@@ -44,7 +45,7 @@ namespace IFS
         private static void PrintHerald()
         {
             Console.WriteLine($"LCM+L IFS {typeof(Entrypoint).Assembly.GetName().Version}, 9/30/2023");
-            Console.WriteLine("(c) 2015-2020 Living Computers: Museum+Labs, 2020-2023 Josh Dersch");
+            Console.WriteLine("(c) 2015-2020 Living Computers: Museum+Labs, 2020-2026 Josh Dersch");
             Console.WriteLine();
             Console.WriteLine();
         }
@@ -78,14 +79,29 @@ namespace IFS
                     case "raw":
                         // Find matching RAW interface
                         {
-                            foreach (LivePacketDevice device in LivePacketDevice.AllLocalMachine)
+                            foreach (ILiveDevice device in CaptureDeviceList.Instance)
                             {
-                                if (device.GetNetworkInterface() != null &&
-                                    device.GetNetworkInterface().Name.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
+                                if (device is LibPcapLiveDevice)
                                 {
-                                    Router.Instance.RegisterRAWInterface(device);
-                                    bFound = true;
-                                    break;
+                                    //
+                                    // We use the friendly name to make it easier to specify in config files.
+                                    //
+                                    if (!string.IsNullOrWhiteSpace(((LibPcapLiveDevice)device).Interface.FriendlyName) &&
+                                        ((LibPcapLiveDevice)device).Interface.FriendlyName.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
+                                    {
+                                        Router.Instance.RegisterRAWInterface(device);
+                                        bFound = true;
+                                        break;
+                                    }
+                                }
+                                else
+                                {
+                                    if (device.Name.ToLowerInvariant() == Configuration.InterfaceName.ToLowerInvariant())
+                                    {
+                                        Router.Instance.RegisterRAWInterface(device);
+                                        bFound = true;
+                                        break;
+                                    }
                                 }
                             }
                         }
