@@ -194,3 +194,6 @@ ModelManifest.xml
 /.vs/ProjectSettings.json
 /.vs/slnx.sqlite
 /.vs/VSWorkspaceState.json
+/PUP/.vs/IFS
+/PUP/packages/Microsoft.Extensions.FileSystemGlobbing.8.0.0
+/PUP/Visual Studio 2022/Visualizers/attribcache140.bin
