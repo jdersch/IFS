@@ -16,32 +16,40 @@
 */
 
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace IFS.CopyDisk
 {
     public struct DiskGeometry
     {
-        public DiskGeometry(int cylinders, int tracks, int sectors)
+        public DiskGeometry(DiabloDiskType type)
         {
-            Cylinders = cylinders;
-            Tracks = tracks;
-            Sectors = sectors;
+            bool isDiablo31 = type == DiabloDiskType.Diablo31;
+            bool isDiablo44Dolphin = type == DiabloDiskType.Diablo44Dolphin;
+
+            Cylinders = isDiablo31 ? 203 : 406;
+
+            Tracks = 2; // true until we start dealing with Trident images
+
+            // The Dolphin's special (emulated) Diablo 44 variant has 14 sectors/track, not 12.
+            Sectors = isDiablo44Dolphin ? 14 : 12;
+
+            TotalSizeInBytes = Cylinders * Tracks * Sectors * DiabloDiskSector.TotalSizeInBytes;
         }
 
-        public int Cylinders;
-        public int Tracks;
-        public int Sectors;
+        public readonly int Cylinders;
+        public readonly int Tracks;
+        public readonly int Sectors;
+
+        // Size of the resulting disk image in bytes
+        public readonly int TotalSizeInBytes;
     }
 
     public enum DiabloDiskType
     {
         Diablo31,
-        Diablo44
+        Diablo44,
+        Diablo44Dolphin
     }
 
     public class DiabloDiskSector
@@ -65,6 +73,9 @@ namespace IFS.CopyDisk
         public byte[] Data;
 
         public static DiabloDiskSector Empty = new DiabloDiskSector(new byte[4], new byte[16], new byte[512]);
+
+        // + 2 because of the extra word used by the disk image format
+        public static int TotalSizeInBytes = 4 + 16 + 512 + 2;
     }
 
     /// <summary>
@@ -78,9 +89,8 @@ namespace IFS.CopyDisk
         {
             _diskType = type;
             _packName = null;
-            bool isDiablo31 = type == DiabloDiskType.Diablo31;
-            // TODO: Dolphin suports 14 sectors/track, standard diablo 44 was 12.  Need more options.
-            _geometry = new DiskGeometry(isDiablo31 ? 203 : 406, 2, isDiablo31 ? 12 : 14);
+            
+            _geometry = new DiskGeometry(type);
             _sectors = new DiabloDiskSector[_geometry.Cylinders, _geometry.Tracks, _geometry.Sectors];
         }
 
@@ -100,6 +110,30 @@ namespace IFS.CopyDisk
             get
             {
                 return _geometry.Sectors * _geometry.Tracks * _geometry.Cylinders;
+            }
+        }
+
+        public static DiabloDiskType GetTypeFromImageSize(long imageSize)
+        {
+            int diablo31size = new DiskGeometry(DiabloDiskType.Diablo31).TotalSizeInBytes;
+            int diablo44size = new DiskGeometry(DiabloDiskType.Diablo44).TotalSizeInBytes;
+            int diablo44DolphinSize = new DiskGeometry(DiabloDiskType.Diablo44Dolphin).TotalSizeInBytes;
+
+            if (imageSize == diablo31size)
+            {
+                return DiabloDiskType.Diablo31;
+            }
+            else if (imageSize == diablo44size)
+            {
+                return DiabloDiskType.Diablo44;
+            }
+            else if (imageSize == diablo44DolphinSize)
+            {
+                return DiabloDiskType.Diablo44Dolphin;
+            }
+            else
+            {
+                return DiabloDiskType.Diablo31;
             }
         }
 

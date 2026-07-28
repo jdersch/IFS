@@ -206,6 +206,7 @@ namespace IFS.Transport
                 // Drop our own UDP packets.
                 if (!groupEndPoint.Address.Equals(_thisIPAddress) && groupEndPoint.Port == Configuration.UDPPort)
                 {
+                    Log.Write(LogType.Verbose, LogComponent.UDP, "My IP {0}, their IP {1}", _thisIPAddress, groupEndPoint.Address);
                     Receive(new System.IO.MemoryStream(data));
                 }
             }

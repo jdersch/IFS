@@ -155,7 +155,7 @@ namespace IFS
             // the Alto's "puptest" diagnostic, for example), the Executive is not.  To keep things happy,
             // we move things back 28 years so that the calendar at least matches up.
             //
-            DateTime currentTime =
+            DateTime currentTime = 
                 new DateTime(
                     DateTime.Now.Year - 28,
                     DateTime.Now.Month,
@@ -164,9 +164,13 @@ namespace IFS
                     DateTime.Now.Minute,
                     DateTime.Now.Second);
 
+            currentTime = currentTime.ToUniversalTime();
+
             // The epoch for .NET is 1/1/0001 at 12 midnight and is counted in 100-ns intervals.
-            // Some conversion is needed, is what I'm saying.            
+            // Some conversion is needed, is what I'm saying.
             DateTime altoEpoch = new DateTime(1901, 1, 1);
+
+            int offset = TimeZoneInfo.Local.BaseUtcOffset.Hours;
 
             TimeSpan timeSinceAltoEpoch = new TimeSpan(currentTime.Ticks - altoEpoch.Ticks);
 
@@ -175,8 +179,8 @@ namespace IFS
             // Build the response data
             AltoTime time = new AltoTime();
             time.DateTime = altoTime;
-            time.TimeZone = 0;      // Hardcoded to GMT
-            time.DSTStart = 366;    // DST not specified yet
+            time.TimeZone = (ushort)((offset > 0) ? (0x8000 | ((offset) << 8)) : (-offset << 8));
+            time.DSTStart = 366;    // DST precalculated in TZ offset above
             time.DSTEnd = 366;
 
             PUPPort localPort = new PUPPort(_configuration.HostAddress, p.DestinationPort.Socket);
@@ -434,7 +438,7 @@ namespace IFS
         private void SendMicrocodeResponse(PUP p)
         {
             //
-            // TODO; validate that this is a request for V1 of the protocol (I don't think there was ever another version...)
+            // TODO: validate that this is a request for V1 of the protocol (I don't think there was ever another version...)
             //
 
             //
@@ -459,7 +463,7 @@ namespace IFS
                 // there are no acks or flow control of any kind.
                 ThreadPool.QueueUserWorkItem((ctx) =>
                 {
-                    Log.Write(LogType.Warning, LogComponent.MiscServices, "Sending microcode file {0} ('{1}').", Helpers.ToOctal(fileNumber), microcodeFile.Name);
+                    Log.Write(LogType.Verbose, LogComponent.MiscServices, "Sending microcode file {0} ('{1}').", Helpers.ToOctal(fileNumber), microcodeFile.Name);
                     SendMicrocodeFile(p.SourcePort, microcodeFile, fileNumber == 0x100 /* test for Initial.eb */);
                 }, null);
             }
@@ -508,8 +512,9 @@ namespace IFS
             // I wonder if there's a hardware glitch the boot microcode is working around.
             // Additionally: the Dorado boot ucode source makes no mention of ignoring an empty packet, nor does the code implement such behavior.
             //
-            if (sendEmptyPacket)
+            if (sendEmptyPacket && Configuration.MicrocodeBootRequestHack)
             {
+                Log.Write(LogType.Verbose, LogComponent.MiscServices, "Sending empty packet prior to microcode.");
                 Router.Instance.SendPup(new PUP(PupType.MicrocodeReply, 0x10000, sourcePort, localPort, new byte[] { }));
             }
 
@@ -532,7 +537,7 @@ namespace IFS
                     PUP microcodeReply = new PUP(PupType.MicrocodeReply, (id | 0x10000), sourcePort, localPort, buffer);
                     Router.Instance.SendPup(microcodeReply);
 
-                    Log.Write(LogType.Warning, LogComponent.MiscServices, "Sequence {0} Sent {1} bytes of microcode file", id, read);
+                    Log.Write(LogType.Verbose, LogComponent.MiscServices, "Sequence {0} Sent {1} bytes of microcode file", id, read);
 
                     for (int i = 0; i < read; i += 2)
                     {
@@ -552,7 +557,7 @@ namespace IFS
             //
             Router.Instance.SendPup(new PUP(PupType.MicrocodeReply, (id | 0x10000), sourcePort, localPort, new byte[] { }));
 
-            Log.Write(LogType.Warning, LogComponent.MiscServices, "Microcode file sent.  Checksum {0:x4}", (checksum & 0xffff));
+            Log.Write(LogType.Verbose, LogComponent.MiscServices, "Microcode file sent.  Checksum {0:x4}", (checksum & 0xffff));
 
         }
 

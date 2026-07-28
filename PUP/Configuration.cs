@@ -73,6 +73,9 @@ namespace IFS
     {
         static Configuration()
         {
+
+            MicrocodeBootRequestHack = true;
+
             ReadConfiguration();
 
             //
@@ -131,7 +134,6 @@ namespace IFS
                 // Set to default.
                 UDPPort = 42424;
             }
-
         }
 
         /// <summary>
@@ -203,6 +205,12 @@ namespace IFS
         /// The delay (in msec) between Breath Of Life packets
         /// </summary>
         public static readonly int BOLDelay;
+
+        /// <summary>
+        /// Temporary:
+        /// Whether to send an extra (bogus) packet for Initial.eb or not
+        /// </summary>
+        public static readonly bool MicrocodeBootRequestHack;
 
         /// <summary>
         /// Individual "virtual" server configurations:
@@ -302,7 +310,7 @@ namespace IFS
 
                                     case "Byte":
                                         {
-                                            byte v = byte.Parse(value);
+                                            byte v = Convert.ToByte(value, 8);
                                             field.SetValue(null, v);
                                         }
                                         break;
@@ -339,7 +347,7 @@ namespace IFS
 
                                             foreach (string v in values)
                                             {
-                                                ints.Add(byte.Parse(v));
+                                                ints.Add(Convert.ToByte(v, 8));
                                             }
 
                                             field.SetValue(null, ints.ToArray());

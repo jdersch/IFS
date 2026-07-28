@@ -161,7 +161,7 @@ namespace IFS.Transport
                     _ledController.BlinkLed(0, 500);
                     Thread.Sleep(75);
                     _ledController.BlinkLed(0, 100);
-                    Thread.Sleep(100);                    
+                    Thread.Sleep(100);
                 }
             }, null);
         }
@@ -296,19 +296,19 @@ namespace IFS.Transport
                 return;
             }
 
-            // Prepend packet length for our internal encapsulation (annoying since we're just going to strip it off again...)
-            byte[] encapsulatedPacket = new byte[decodedPacket.Length + 2];
-            Array.Copy(decodedPacket, 0, encapsulatedPacket, 2, decodedPacket.Length);
+            // Prepend packet length for our internal encapsulation and strip off the ethernet CRC since our encapsulation
+            // does not use it.
+            byte[] encapsulatedPacket = new byte[decodedPacket.Length];
+            Array.Copy(decodedPacket, 0, encapsulatedPacket, 2, decodedPacket.Length - 2);   // - 2 to strip off CRC
 
-            int encapsulatedLength = decodedPacket.Length / 2;
+            int encapsulatedLength = (decodedPacket.Length - 2) / 2;
             encapsulatedPacket[0] = (byte)(encapsulatedLength >> 8);
             encapsulatedPacket[1] = (byte)encapsulatedLength;
 
             MemoryStream packetStream = new MemoryStream(encapsulatedPacket);
+            Log.Write(LogType.Verbose, LogComponent.E3Mbit, "Received packet (0x{0:x} bytes), sending to router.", receivedDataLength);
             _routerCallback(packetStream, this);
             _ledController.SetLed(3, 0);
-
-            Log.Write(LogType.Verbose, LogComponent.E3Mbit, "Received packet (0x{0:x} bytes), sent to router.", receivedDataLength);
         }
 
         /// <summary>

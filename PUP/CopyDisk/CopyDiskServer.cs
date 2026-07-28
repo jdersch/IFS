@@ -93,8 +93,8 @@ namespace IFS.CopyDisk
     struct SendDiskParamsBlock
     {
         public ushort Length;
-        public ushort Command;        
-        public BCPLString UnitName;        
+        public ushort Command;
+        public BCPLString UnitName;
     }    
 
     struct HereAreDiskParamsBFSBlock
@@ -218,6 +218,8 @@ namespace IFS.CopyDisk
     {
         public CopyDiskWorker(ServerConfiguration config, BSPChannel channel) : base(config, channel)
         {
+            _packType = DiabloDiskType.Diablo44Dolphin;
+
             // Register for channel events
             channel.OnDestroy += OnChannelDestroyed;
 
@@ -267,7 +269,7 @@ namespace IFS.CopyDisk
                 // Retrieve length of this block (in bytes):
                 int length = Channel.ReadUShort() * 2;
 
-                // Sanity check that length is a reasonable value.                
+                // Sanity check that length is a reasonable value.
                 if (length > 2048)
                 {
                     Channel.SendAbort("Block length is invalid.");
@@ -277,7 +279,7 @@ namespace IFS.CopyDisk
                 // Retrieve type            
                 CopyDiskBlock blockType = (CopyDiskBlock)Channel.ReadUShort();
 
-                // Read rest of block starting at offset 4 (so deserialization works)              
+                // Read rest of block starting at offset 4 (so deserialization works)
                 byte[] data = new byte[length];
                 Channel.Read(ref data, data.Length - 4, 4);
 
@@ -356,11 +358,11 @@ namespace IFS.CopyDisk
                                 // Attempt to open the image file and read it into memory.
                                 //
                                 try
-                                {                                    
+                                {
                                     using (FileStream packStream = new FileStream(diskPath, FileMode.Open, FileAccess.Read))
                                     {
-                                        // TODO: determine pack type rather than assuming Diablo 31
-                                        _pack = new DiabloPack(DiabloDiskType.Diablo44);
+                                        DiabloDiskType type = DiabloPack.GetTypeFromImageSize(packStream.Length);
+                                        _pack = new DiabloPack(type);
                                         _pack.Load(packStream, diskPath, true /* reverse byte order */);
                                     }
 
@@ -403,11 +405,10 @@ namespace IFS.CopyDisk
                             {
                                 //
                                 // Create a new in-memory disk image.  We will write it out to disk when the transfer is completed.
-                                //                                                                   
+                                //
                                 // TODO: determine pack type based on disk params rather than assuming Diablo 31
-                                _pack = new DiabloPack(DiabloDiskType.Diablo44);
+                                _pack = new DiabloPack(_packType);
                                 _pack.PackName = diskPath;
-                                                           
 
                                 // Send a "HereAreDiskParams" response indicating success.
                                 //
@@ -426,6 +427,26 @@ namespace IFS.CopyDisk
                                 diskParams.Cylinders,
                                 diskParams.Heads,
                                 diskParams.Sectors);
+
+                            switch (diskParams.DiskType)
+                            {
+                                case 10:        // 12 octal
+                                    // This is used for all diablo disks, 31, 44, and the larger 14-sector 44 the Dolphin pretends to have.
+                                    // So we have to check geometry here:
+                                     _packType = diskParams.Cylinders == 406 ? DiabloDiskType.Diablo44 : DiabloDiskType.Diablo31;
+
+                                    if (_packType == DiabloDiskType.Diablo44 && diskParams.Sectors == 14)
+                                    {
+                                        _packType = DiabloDiskType.Diablo44Dolphin;
+                                    }
+
+                                    break;
+
+                                default:        // unknown, log it
+                                    Log.Write(LogType.Error, LogComponent.CopyDisk, "Unknown DiskType {0} specified",
+                                        diskParams.DiskType);
+                                    break;
+                            }
 
                         }
                         break;
@@ -640,6 +661,9 @@ namespace IFS.CopyDisk
 
         // The pack being read / stored by this server
         private DiabloPack _pack = null;
+
+        // Last pack type sent by HereAreDiskParams from the client
+        private DiabloDiskType _packType = DiabloDiskType.Diablo31;
 
         // Current position and range of a write operation
         private int _currentAddress = 0;

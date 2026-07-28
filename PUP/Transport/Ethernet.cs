@@ -116,7 +116,7 @@ namespace IFS.Transport
             }
             catch (Exception ex)
             {
-                // TODO: log this
+                Log.Write(LogType.Error, LogComponent.Ethernet, "Internal error: failed to dispatch packet.  Exception:\n {0}", ex.ToString());
             }
         }
 

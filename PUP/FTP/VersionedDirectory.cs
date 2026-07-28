@@ -53,25 +53,32 @@ namespace IFS.FTP
     {
         public static string GetPathWithoutRevision(string fileName)
         {
-            int revisionSpecifierIndex = fileName.LastIndexOf('!');
+            int revisionSpecifierIndex = GetRevisionCharacterIndex(fileName);
 
-            if (revisionSpecifierIndex == -1)
+            if (revisionSpecifierIndex != -1)
             {
-                // No revision specified in name, return name as-is
-                return fileName;
+                return fileName.Substring(0, revisionSpecifierIndex);
             }
 
-            return fileName.Substring(0, revisionSpecifierIndex);
+            return fileName;
         }
 
         public static int GetPathRevision(string fileName)
         {
-            int revisionSpecifierIndex = fileName.LastIndexOf('!');
+            RevisionTagFormat tagFormat = GetRevisionTagFormat(fileName);
+            int revisionSpecifierIndex = GetRevisionCharacterIndex(fileName);
 
             if (revisionSpecifierIndex == -1)
             {
                 // No revision specified in name.  Return -1 to explicitly denote that the file has no revision tag.
                 return -1;
+            }
+
+            // Increment the index for tilde-format tags (number starts after the ~, index is currently at .
+            // this is the worst
+            if (tagFormat == RevisionTagFormat.Tilde)
+            {
+                revisionSpecifierIndex++;
             }
 
             int revision = -1;
@@ -160,7 +167,51 @@ namespace IFS.FTP
             return matchingFiles;
         }
 
-        
+        private enum RevisionTagFormat
+        {
+            None,
+            Exclamation,
+            Tilde
+        }
+
+        private static RevisionTagFormat GetRevisionTagFormat(string fileName)
+        {
+            // Try the format "filename.ext!version":
+            int periodIndex = fileName.LastIndexOf('.');
+            int revisionSpecifierIndex = fileName.LastIndexOf('!');
+
+            if (revisionSpecifierIndex != -1 && revisionSpecifierIndex > periodIndex)
+            {
+                return RevisionTagFormat.Exclamation;
+            }
+
+            // "filename.ext.~version~" is sometimes used...
+            revisionSpecifierIndex = fileName.LastIndexOf(".~");
+
+            if (revisionSpecifierIndex != -1)
+            {
+                return RevisionTagFormat.Tilde;
+            }
+
+            return RevisionTagFormat.None;
+        }
+
+        private static int GetRevisionCharacterIndex(string fileName)
+        {
+            RevisionTagFormat tagFormat = GetRevisionTagFormat(fileName);
+
+            switch (tagFormat)
+            {
+                case RevisionTagFormat.Exclamation:
+                    return fileName.LastIndexOf('!');
+
+                case RevisionTagFormat.Tilde:
+                    return fileName.LastIndexOf(".~");
+
+                default:
+                    return -1;
+            }
+        }
 
         private List<FileInfo> GetFiles(string path)
         {

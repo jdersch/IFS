@@ -115,6 +115,7 @@ namespace IFS.FTP
     {
         public FTPWorker(ServerConfiguration config, BSPChannel channel) : base(config, channel)
         {
+            _config = config;
             _ftpRoot = config.FTPRoot;
 
             // Register for channel events
@@ -150,7 +151,7 @@ namespace IFS.FTP
             {
                 if (!(e is ThreadAbortException))
                 {
-                    Log.Write(LogType.Error, LogComponent.FTP, "FTP worker thread terminated with exception '{0}'.", e.Message);
+                    Log.Write(LogType.Error, LogComponent.FTP, "FTP worker thread terminated with exception '{0}'.", e.ToString());
                     Channel.SendAbort("Server encountered an error.");
 
                     OnExit(this);
@@ -180,8 +181,9 @@ namespace IFS.FTP
 
                             //
                             // Return our Version.
-                            FTPYesNoVersion serverVersion = new FTPYesNoVersion(1, "LCM+L IFS FTP of 4 Feb 2016.");
-                            SendFTPResponse(FTPCommand.Version, serverVersion);                            
+                            string herald = $"LCM+L FTP Server {DirectoryServices.Instance.AddressLookup(_config.HostAddress)} ({_config.HostAddress}) v1.4";
+                            FTPYesNoVersion serverVersion = new FTPYesNoVersion(1, herald);
+                            SendFTPResponse(FTPCommand.Version, serverVersion);
                         }
                         break;
 
@@ -195,7 +197,7 @@ namespace IFS.FTP
 
                             PropertyList pl = new PropertyList(fileSpec);
 
-                            EnumerateFiles(pl, command == FTPCommand.NewEnumerate);                                                        
+                            EnumerateFiles(pl, command == FTPCommand.NewEnumerate);
                         }
                         break;
 
@@ -480,7 +482,13 @@ namespace IFS.FTP
 
             List<PropertyList> files = EnumerateFiles(fullPath, version);
 
+            if (!files.Any())
+            {
+                SendFTPNoResponse(NoCode.FileNotFound, "File not found.");
+            }
+
             // Send each list to the user, followed by the actual file data.
+            // (if there are no matching files, we reported it above.)
             //
             foreach (PropertyList matchingFile in files)
             {
@@ -1100,6 +1108,9 @@ namespace IFS.FTP
                 return null;
             }
 
+            // Sanitize path separators; we allow both host-native separators and the original '>' separator:
+            directory = directory?.Replace('>', Path.DirectorySeparatorChar);
+
             //
             // Attempt to build a full file path from the bits we have.
             //
@@ -1121,7 +1132,7 @@ namespace IFS.FTP
             else
             {
                 //
-                // Directory was specified, Server-Filename was not, so we expect at least
+                // Directory may have been specified, Server-Filename was not, so we expect at least
                 // Name-Body to be specified.
                 if (nameBody == null)
                 {
@@ -1129,8 +1140,15 @@ namespace IFS.FTP
                     return null;
                 }
 
-
-                relativePath = Path.Combine(directory, nameBody);
+                // Use directory if specified.
+                if (directory != null)
+                {
+                    relativePath = Path.Combine(directory, nameBody);
+                }
+                else
+                {
+                    relativePath = nameBody;
+                }
 
                 if (version != null)
                 {
@@ -1150,7 +1168,7 @@ namespace IFS.FTP
             {
                 SendFTPNoResponse(NoCode.IllegalDirectory, "Path must be relative.");
                 return null;
-            }            
+            }
 
             // Build path combined with FTP root directory
             //
@@ -1161,7 +1179,9 @@ namespace IFS.FTP
             // Path (including filename) must not contain any trickery like "..\" to try and escape from the directory root
             // And directory must not include invalid characters.  
             //
-            if (relativePath.Contains("..\\") ||
+            // (Is there a platform-neutral way to ask for the "parent directory specifier" string (i.e. ".." on unix/windows...
+            // not that I expect this to run anywhere else.  Still, feels bad.)
+            if (relativePath.Contains(".." + Path.PathSeparator) ||
                 absoluteDirectory.IndexOfAny(Path.GetInvalidPathChars()) != -1)
             {
                 SendFTPNoResponse(NoCode.IllegalDirectory, "Path is invalid.");
@@ -1175,7 +1195,7 @@ namespace IFS.FTP
             {
                 SendFTPNoResponse(NoCode.FileNotFound, "Path does not exist.");
                 return null;
-            }        
+            }
 
             //
             // Looks like we should be OK.
@@ -1291,6 +1311,7 @@ namespace IFS.FTP
             }
         }
 
+        private ServerConfiguration _config;
         private string _ftpRoot;
 
         private Thread _workerThread;

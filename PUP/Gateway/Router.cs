@@ -49,39 +49,43 @@ namespace IFS.Gateway
     {
         private Router()
         {
-            _localProtocolDispatchers = new List<PUPProtocolDispatcher>();
-
-            foreach (ServerConfiguration config in Configuration.ServerConfigurations)
-            {
-                _localProtocolDispatchers.Add(new PUPProtocolDispatcher(config));
-            }
             _routingTable = new RoutingTable();
             _packetInterfaces = new List<IPacketInterface>();
 
-            //
-            // Look up our own network in the table and get our port.
-            // If we don't have an entry in the table, disable routing.
-            //
-            RoutingTableEntry ourNetwork = _routingTable.GetAddressForNetworkNumber(DirectoryServices.Instance.LocalNetwork);
+            _localProtocolDispatchers = new List<PUPProtocolDispatcher>();
 
-            _gatewayUdpClientLock = new ReaderWriterLockSlim();
-
-            if (ourNetwork == null)
+            if (Configuration.RunIFSServices)
             {
-                Log.Write(LogType.Warning,
-                    LogComponent.Routing, 
-                        "networks.txt does not contain a definition for our network ({0}).  Gateway routing disabled.",
-                        DirectoryServices.Instance.LocalNetwork);
+                foreach (ServerConfiguration config in Configuration.ServerConfigurations)
+                {
+                    _localProtocolDispatchers.Add(new PUPProtocolDispatcher(config));
+                }
 
-                _gatewayUdpClient = null;
+                //
+                // Look up our own network in the table and get our port.
+                // If we don't have an entry in the table, disable routing.
+                //
+                RoutingTableEntry ourNetwork = _routingTable.GetAddressForNetworkNumber(DirectoryServices.Instance.LocalNetwork);
+
+                _gatewayUdpClientLock = new ReaderWriterLockSlim();
+
+                if (ourNetwork == null)
+                {
+                    Log.Write(LogType.Warning,
+                        LogComponent.Routing,
+                            "networks.txt does not contain a definition for our network ({0}).  Gateway routing disabled.",
+                            DirectoryServices.Instance.LocalNetwork);
+
+                    _gatewayUdpClient = null;
+                }
+                else
+                {
+                    _gatewayUdpPort = ourNetwork.Port;
+
+                    // Start the external network receiver.
+                    BeginExternalReceive();
+                }
             }
-            else
-            {
-                _gatewayUdpPort = ourNetwork.Port;
-
-                // Start the external network receiver.
-                BeginExternalReceive();
-            }           
         }
 
         public static Router Instance
@@ -232,6 +236,12 @@ namespace IFS.Gateway
                 //
                 // Not local, and we were asked not to route this PUP, so drop it on the floor.
                 //
+                Log.Write(LogType.Verbose,
+                           LogComponent.Routing,
+                           "PUP type {0} source {1} dest {2} unhandled.",
+                           pup.Type,
+                           pup.SourcePort,
+                           pup.DestinationPort);
             }
         }
 
@@ -268,10 +278,46 @@ namespace IFS.Gateway
                 catch (Exception e)
                 {
                     // An error occurred, log it.
-                    Log.Write(LogType.Error, LogComponent.PUP, "Error handling PUP: {0}", e.Message);
+                    Log.Write(LogType.Error, LogComponent.PUP, "Error handling PUP: {0}", e.StackTrace);
                 }
             }
-            else if (!Configuration.RunIFSServices)
+            else if (Configuration.RunIFSServices &&
+                     etherType3mbit == PupPacketBuilder.PupFrameType)
+            {
+                // Just extra-verbose logging:
+                // TODO: factor this out
+                try
+                {
+                    PUP pup = new PUP(packetStream, length);
+                    Log.Write(LogType.Verbose,
+                           LogComponent.Routing,
+                           "PUP type {0} source {1} dest {2} unhandled.",
+                           pup.Type,
+                           pup.SourcePort,
+                           pup.DestinationPort);
+                }
+                catch (Exception e)
+                {
+                    // An error occurred, log it.
+                    Log.Write(LogType.Error, LogComponent.PUP, "Error handling PUP: {0}", e.Message);
+                }
+
+            }
+            else
+            {
+                Log.Write(LogType.Verbose,
+                           LogComponent.Routing,
+                           "Received 3mbit packet from {0} (source {1} dest {2} ethertype {3}) is not a PUP.  Dropping.",
+                           receivingInterface,
+                           Helpers.ToOctal(source),
+                           Helpers.ToOctal(destination),
+                           Helpers.ToOctal(etherType3mbit));
+
+                Log.WriteByteArray(LogType.Verbose, LogComponent.Routing, "Packet payload:", packetStream.ToArray());
+            }
+
+            // If we're configured to talk over more than one interface then we'll relay this packet through them:
+            if (_packetInterfaces.Count > 1)
             {
                 // Bridge the packet through all registered interfaces other than the one it came in on
                 foreach (IPacketInterface iface in _packetInterfaces)

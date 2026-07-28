@@ -57,9 +57,6 @@ namespace IFS
         {
             //
             // Filter out packets not destined for us.
-            // Even though we use pcap in non-promiscuous mode, if
-            // something else has set the interface to promiscuous mode, that
-            // setting may be overridden.
             //
             if (pup.DestinationPort.Host != 0 &&                              // Not broadcast.
                 pup.DestinationPort.Host != _configuration.HostAddress.Host)  // Not our address.
@@ -69,9 +66,9 @@ namespace IFS
                 return;
             }
 
-            //      
+            //
             // Forward PUP on to registered endpoints.
-            //                                    
+            //
             if (_dispatchMap.ContainsKey(pup.DestinationPort.Socket))
             {
                 PUPProtocolEntry entry = _dispatchMap[pup.DestinationPort.Socket];

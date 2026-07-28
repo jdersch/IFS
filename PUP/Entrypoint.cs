@@ -44,8 +44,8 @@ namespace IFS
 
         private static void PrintHerald()
         {
-            Console.WriteLine($"LCM+L IFS {typeof(Entrypoint).Assembly.GetName().Version}, 9/30/2023");
-            Console.WriteLine("(c) 2015-2020 Living Computers: Museum+Labs, 2020-2026 Josh Dersch");
+            Console.WriteLine($"LCM+L IFS {typeof(Entrypoint).Assembly.GetName().Version}, 5/8/2026");
+            Console.WriteLine("(c) 2015-2020 Living Computers: Museum+Labs, 2015-2026 Josh Dersch");
             Console.WriteLine();
             Console.WriteLine();
         }

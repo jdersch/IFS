@@ -1,14 +1,15 @@
-Readme.txt for IFS v1.4:
+Readme.txt for IFS v1.5:
 
 1.0 Introduction and Overview
 =============================
 
 In the 1970s, Xerox PARC developed a set of protocols based around the "PUP"
-(the "PARC Universal Packet").  These were intended to be a stopgap until
-something "real" could be designed and implemented, so the suite was referred 
-to as "IFS" ("Interim File Server").  That real"implementation never came
-into being during the Alto's lifetime, so the IFS was a permanent fixture of
-the network environment at PARC during the heyday of the Alto.
+(the "PARC Universal Packet") for use on their experimental 3mbit ethernet network.
+These were intended to be a stopgap until something "real" could be designed 
+and implemented, so the suite was referred to as "IFS" ("Interim File Server")
+That "real" implementation never came into being during the Alto's lifetime, so
+IFS was a permanent fixture of the network environment at PARC during the heyday
+of the Alto.
 
 The LCM+L's IFS implementation is an implementation of this protocol suite
 that runs on a modern PC.  It is designed to work with the ContrAlto Alto
@@ -20,7 +21,7 @@ It provides the following IFS services:
 
   - BreathOfLife:   Provides the "Breath Of Life" packet needed to bootstrap
                     an Alto over the network.
-  - EFTP/Boot:      Provides boot files over the network.
+  - EFTP/Boot:      Provides boot and microcode files over the network.
   - FTP:            File Transfer Protocol.
   - CopyDisk:       Allows imaging and restoring of Alto disk packs over the 
                     network.
@@ -30,17 +31,24 @@ It provides the following IFS services:
   - Mail:           Delivers mail to other users.  (Currently only on the same
                     network, mail is not routed.)
 
-
-The following services are not yet provided, but are planned:
-
-  - EFTP/Printing:  Provides print services to networked Altos
-  - Mail routing:   Sending mail to other sites over the Internet.
-
 If you have questions, or run into issues or have feature requests, please
-feel free to e-mail me at joshd@livingcomputers.org.
+feel free to e-mail me at derschjo@gmail.com.
 
+1.1 System Requirements
+-----------------------
 
-1.1 Getting Started
+IFS should run on any system that can provide a .NET runtime; this includes
+Windows, Linux, and macOS (via https://dotnet.microsoft.com/en-us/download).
+
+RAW ethernet access will require pcap be installed, this is present on most
+Unix and macOS systems by default; on Windows https://npcap.com/ is a good
+option.
+
+To talk to real 3mbit ethernet devices you can run IFS on a BeagleBone
+(https://www.beagleboard.org/boards/beaglebone-black) with a special cape
+designed by Ken Shirriff: https://github.com/shirriff/alto-ethernet-interface.
+
+1.2 Getting Started
 -------------------
 
 IFS does not provide an installer; unzip the archive to a directory on the
@@ -69,6 +77,7 @@ These include:
     - accounts.txt:         Defines the set of user accounts
     - bootdirectory.txt:    Maps boot numbers to boot files for network boot
     - hosts.txt:            Maps Inter-network numbers to names
+    - networks.txt:         Defines Internet routes to other IFS instances
     - ifs.cfg:              General configuration for the IFS server
 
 2.1 ifs.cfg:
@@ -77,8 +86,20 @@ These include:
 ifs.cfg contains general configuration details for the server.  It specifies
 configuration for the network transport, directory paths and debugging options.
 
+IFS may host multiple FTP server instances under a single IFS process, this makes
+it easy (for example) to simulate PARC's internal 3mbit network using files from
+CHM's Xerox PARC archive (https://xeroxparcarchive.computerhistory.org/).
+
+The "ServerHosts" configuration field can specify multiple 3mbit ethernet 
+addresses, each of which will address a unique FTP server; the filesystem root of 
+each of these FTP servers is specified by a corresponding entry in the "FTPRoots" 
+configuration field.
+
 Directory configuration:
-    - FTPRoot:      Specifies the path for the root of the FTP directory tree.
+
+    - FTPRoots:     A comma-delimited list specifying the paths for the roots 
+                    of the FTP directory trees exposed by the servers listed
+                    in the "ServerHosts" field (see below)
     - CopyDiskRoot:	Specifies the path for the directory to store CopyDisk 
                     images.
     - BootRoot:     Specifies the path for boot images.
@@ -86,11 +107,12 @@ Directory configuration:
                     (User mail folders are placed in this directory.)
 
 Interface configuration:
+
     - InterfaceTypes:   Any combination of "RAW" "UDP" or "3MBIT".  Specifies 
                         the transports to use for communication:
                         - RAW: Raw Ethernet frames
                         - UDP: UDP Datagram
-                        - 3MBIT: The Beaglebone-based Alto Ethernet Interface
+                        - 3MBIT: Beaglebone-based 3mbit Ethernet Interface
 
     - InterfaceName:    The name of the host network adapter to use for 
                         communication.
@@ -98,10 +120,14 @@ Interface configuration:
     - UDPPort:          The port number (decimal) to use for the UDP transport.
 
 Network configuration:
+
     - ServerNetwork:    The IFS server's network number.
-    - ServerHost:       The IFS server's host number.
+    - ServerHosts:      A comma-delimited list of network addresses to use for
+                        FTP servers.  Gateway/Boot/CopyDisk/Mail services will
+                        be exposed only on the first entry in this list.
 
 Debugging configuration:
+
     - LogTypes:         The level of verbosity for logging.  One of:
                         None, Normal, Warning, Error, Verbose, or All
 
@@ -111,6 +137,7 @@ Debugging configuration:
                         BootServer, UDP, Mail, Configuration, or All
 
 Misc:
+
     - RunIFSServices:   Whether to run the full suite of IFS services or just
                         perform basic bridging (this is mostly useful when
                         working with real hardware via the Alto Interface Hardware
@@ -151,7 +178,7 @@ changed), the IFS server's inter-network name is 1#1# (network 1, host 1).
 
 2.3 networks.txt
 ----------------
- 
+
 networks.txt identifies known networks and provides the address and port for 
 their IFS gateway servers.  See Section 5 for more details on gateways.
 This file is processed when IFS starts.
@@ -399,8 +426,10 @@ found on Bitsavers, at http://bitsavers.org/bits/Xerox/Alto/.
 
 A wide variety of files, including programs, documentation, and related data
 can be found in the CHM's Xerox PARC Alto filesystem archive at 
-http://xeroxalto.computerhistory.org/.  The raw files can be downloaded and
-placed in your FTPRoot or BootRoot directories as desired.
+http://xeroxalto.computerhistory.org/ as well as the IFS archive at 
+https://xeroxparcarchive.computerhistory.org/.  
+The raw files can be downloaded and placed in your FTPRoot or BootRoot 
+directories as desired.
 
 
 7.0 Xerox Documentation Reference
@@ -464,6 +493,7 @@ IFS services, not the IFS running on the BeagleBone.
 IFS (and ContrAlto) use a very simple encapsulation for transmitting 3mbit 
 Ethernet packets over modern transports.  An encapsulated packet consists of
 two fields:  
+
     - Packet Length (2 bytes): Length (in 16-bit words) of the 3mbit Packet 
         Data field (see below)
     - Packet Data (N bytes): The 3mbit packet, including 3mbit Ethernet header

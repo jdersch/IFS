@@ -41,7 +41,7 @@ namespace IFS
 
         public override string ToString()
         {
-            return $"#{Helpers.ToOctal(Network)}#{Helpers.ToOctal(Host)}";
+            return $"{Helpers.ToOctal(Network)}#{Helpers.ToOctal(Host)}#";
         }
     }
 

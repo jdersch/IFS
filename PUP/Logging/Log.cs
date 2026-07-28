@@ -18,6 +18,7 @@
 #define LOGGING_ENABLED
 
 using System;
+using System.ComponentModel;
 using System.IO;
 
 namespace IFS.Logging
@@ -106,6 +107,26 @@ namespace IFS.Logging
                 if (_logStream != null)
                 {
                     _logStream.WriteLine(component.ToString() + ": " + message, args);
+                }
+            }
+        }
+
+        public static void WriteByteArray(LogType type, LogComponent component, string message, byte[] bytes)
+        {
+            if ((_type & type) != 0 &&
+                (_components & component) != 0)
+            {
+                Console.WriteLine(message);
+                for (int i = 0; i < bytes.Length; i+=8)
+                {
+                    Console.Write("0x{0:x3}: ", i);
+
+                    for (int j = 0; j < 8 && i + j < bytes.Length; j++)
+                    {
+                        Console.Write("0x{0:x2} ", bytes[i + j]);
+                    }
+
+                    Console.WriteLine();
                 }
             }
         }
